@@ -1,0 +1,39 @@
+{
+  "license": "0BSD",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start",
+    "start:clear": "expo start -c",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "web:19006": "expo start --web --port 19006",
+    "doctor": "cmd /c \"if exist .expo rd /s /q .expo & npx expo-doctor\"",
+    "env:init": "node scripts/init-env.cjs",
+    "supabase:check": "node scripts/check-supabase-env.cjs"
+  },
+  "dependencies": {
+    "@miblanchard/react-native-slider": "*",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/bottom-tabs": "^7.15.5",
+    "@react-navigation/native": "^7.1.33",
+    "@react-navigation/native-stack": "^7.14.4",
+    "@supabase/supabase-js": "^2.99.1",
+    "@types/react": "~19.1.10",
+    "expo": "~54.0.33",
+    "expo-av": "~16.0.8",
+    "expo-image-picker": "~17.0.10",
+    "expo-linear-gradient": "~15.0.8",
+    "lucide-react-native": "*",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
+    "react-native-web": "^0.21.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

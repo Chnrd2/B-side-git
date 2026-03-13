@@ -1,0 +1,73 @@
+
+> web:19006
+> expo start --web --port 19006
+
+Starting project at C:\Users\Administrator\Desktop\b-side
+Starting Metro Bundler
+Waiting on http://localhost:19006
+Logs for your project will appear below.
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2476/2477)
+Web Bundled 4437ms index.js (2477 modules)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 83ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Unable to resolve "../components/ProfileScreen" from "navigation\AppNavigator.tsx"
+[0m [90m 13 |[39m [36mimport[39m [33mNotificationsCenterScreen[39m [36mfrom[39m [32m'../components/NotificationsCenterScreen'[39m[33m;[39m
+ [90m 14 |[39m [36mimport[39m [33mPlansScreen[39m [36mfrom[39m [32m'../components/PlansScreen'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 15 |[39m [36mimport[39m [33mProfileScreen[39m [36mfrom[39m [32m'../components/ProfileScreen'[39m[33m;[39m
+ [90m    |[39m                            [31m[1m^[22m[39m
+ [90m 16 |[39m [36mimport[39m [33mProductFoundationScreen[39m [36mfrom[39m [32m'../components/ProductFoundationScreen'[39m[33m;[39m
+ [90m 17 |[39m [36mimport[39m [33mSearchScreen[39m [36mfrom[39m [32m'../components/SearchScreen'[39m[33m;[39m
+ [90m 18 |[39m [36mimport[39m [33mSecurityCenterScreen[39m [36mfrom[39m [32m'../components/SecurityCenterScreen'[39m[33m;[39m[0m
+
+Import stack:
+
+ navigation\AppNavigator.tsx
+ | import "../components/ProfileScreen"
+
+ App.js
+ | import "./navigation/AppNavigator"
+
+ index.js
+ | import "./App"
+
+ 
+ | import "./index"
+
+Unable to resolve "../components/InboxScreen" from "navigation\AppNavigator.tsx"
+[0m [90m  7 |[39m [36mimport[39m [33mChatScreen[39m [36mfrom[39m [32m'../components/ChatScreen'[39m[33m;[39m
+ [90m  8 |[39m [36mimport[39m [33mFeedScreen[39m [36mfrom[39m [32m'../components/FeedScreen'[39m[33m;[39m
+[31m[1m>[22m[39m[90m  9 |[39m [36mimport[39m [33mInboxScreen[39m [36mfrom[39m [32m'../components/InboxScreen'[39m[33m;[39m
+ [90m    |[39m                          [31m[1m^[22m[39m
+ [90m 10 |[39m [36mimport[39m [33mLegalCenterScreen[39m [36mfrom[39m [32m'../components/LegalCenterScreen'[39m[33m;[39m
+ [90m 11 |[39m [36mimport[39m [33mListDetailScreen[39m [36mfrom[39m [32m'../components/ListDetailScreen'[39m[33m;[39m
+ [90m 12 |[39m [36mimport[39m [33mListsScreen[39m [36mfrom[39m [32m'../components/ListsScreen'[39m[33m;[39m[0m
+
+Import stack:
+
+ navigation\AppNavigator.tsx
+ | import "../components/InboxScreen"
+
+ App.js
+ | import "./navigation/AppNavigator"
+
+ index.js
+ | import "./App"
+
+ 
+ | import "./index"
+
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 62ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 47ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 43ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 53ms index.js (1 module)
+ LOG  [web] Logs will appear in the browser console
