@@ -11,60 +11,56 @@ import {
 } from 'react-native';
 import { Search as SearchIcon } from 'lucide-react-native';
 
-const GENRES = ['Rock', 'Pop', 'Hip Hop', 'Electrónica', 'Jazz', 'Indie'];
+import { searchMusicCatalog } from '../lib/musicCatalog';
+
+const GENRES = ['Rock', 'Pop', 'Hip Hop', 'Electronica', 'Jazz', 'Indie'];
 
 const SearchScreen = ({ onSelectAlbum }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [catalogSource, setCatalogSource] = useState('itunes');
   const requestIdRef = useRef(0);
+  const abortControllerRef = useRef(null);
 
   const searchMusic = async (term) => {
     if (term.length < 2) {
       requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
       setResults([]);
+      setCatalogSource('itunes');
       setLoading(false);
       return;
     }
 
     const currentRequestId = requestIdRef.current + 1;
     requestIdRef.current = currentRequestId;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `https://itunes.apple.com/search?term=${encodeURIComponent(
-          term
-        )}&entity=song&limit=30`
-      );
-      const data = await response.json();
-
-      if (currentRequestId !== requestIdRef.current) return;
-
-      const uniqueAlbums = new Set();
-      const formattedResults = [];
-
-      data.results.forEach((item) => {
-        if (uniqueAlbums.has(item.collectionId) || !item.previewUrl) return;
-
-        uniqueAlbums.add(item.collectionId);
-        formattedResults.push({
-          id: item.collectionId.toString(),
-          title: item.collectionName || item.trackName,
-          artist: item.artistName,
-          cover: item.artworkUrl100.replace('100x100bb', '600x600bb'),
-          genre: item.primaryGenreName,
-          year: new Date(item.releaseDate).getFullYear(),
-          previewUrl: item.previewUrl,
-        });
+      const response = await searchMusicCatalog(term, {
+        signal: abortControllerRef.current.signal,
+        limit: 30,
       });
 
-      setResults(formattedResults.slice(0, 25));
+      if (currentRequestId !== requestIdRef.current) {
+        return;
+      }
+
+      setResults((response.items || []).slice(0, 25));
+      setCatalogSource(response.source || 'itunes');
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        return;
+      }
+
       if (currentRequestId === requestIdRef.current) {
         setResults([]);
       }
-      console.error('Error buscando música:', error);
+
+      console.error('Error buscando musica:', error);
     } finally {
       if (currentRequestId === requestIdRef.current) {
         setLoading(false);
@@ -77,16 +73,21 @@ const SearchScreen = ({ onSelectAlbum }) => {
 
     if (sanitizedQuery.length < 2) {
       requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
       setResults([]);
+      setCatalogSource('itunes');
       setLoading(false);
-      return;
+      return undefined;
     }
 
     const delay = setTimeout(() => {
-      searchMusic(sanitizedQuery);
+      void searchMusic(sanitizedQuery);
     }, 400);
 
-    return () => clearTimeout(delay);
+    return () => {
+      clearTimeout(delay);
+      abortControllerRef.current?.abort();
+    };
   }, [query]);
 
   return (
@@ -105,13 +106,17 @@ const SearchScreen = ({ onSelectAlbum }) => {
         />
       </View>
 
+      <Text style={styles.catalogHint}>
+        Catalogo activo: {catalogSource === 'spotify' ? 'Spotify' : 'iTunes'}
+      </Text>
+
       {loading && (
-        <ActivityIndicator color="#A855F7" style={{ marginBottom: 20 }} />
+        <ActivityIndicator color="#A855F7" style={styles.loader} />
       )}
 
       {query.trim().length === 0 ? (
         <View>
-          <Text style={styles.sectionTitle}>Explorar Géneros</Text>
+          <Text style={styles.sectionTitle}>Explorar generos</Text>
           <View style={styles.genreGrid}>
             {GENRES.map((genre) => (
               <TouchableOpacity
@@ -127,7 +132,7 @@ const SearchScreen = ({ onSelectAlbum }) => {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>No encontramos resultados</Text>
           <Text style={styles.emptyText}>
-            Probá con otro nombre de disco, artista o género.
+            Proba con otro nombre de disco, artista o genero.
           </Text>
         </View>
       ) : (
@@ -145,7 +150,11 @@ const SearchScreen = ({ onSelectAlbum }) => {
                   {item.title}
                 </Text>
                 <Text style={styles.artistName} numberOfLines={1}>
-                  {item.artist} • {item.year}
+                  {item.artist}
+                  {item.year ? ` - ${item.year}` : ''}
+                </Text>
+                <Text style={styles.sourceBadge}>
+                  {item.source === 'spotify' ? 'Spotify' : 'iTunes'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -157,22 +166,53 @@ const SearchScreen = ({ onSelectAlbum }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', padding: 20, paddingTop: 60 },
-  headerTitle: { color: 'white', fontSize: 32, fontWeight: '900', marginBottom: 20 },
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    padding: 20,
+    paddingTop: 60,
+  },
+  headerTitle: {
+    color: 'white',
+    fontSize: 32,
+    fontWeight: '900',
+    marginBottom: 20,
+  },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#0A0A0A',
     borderRadius: 16,
     paddingHorizontal: 15,
-    marginBottom: 20,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#222',
   },
   searchIcon: { marginRight: 10 },
-  searchBar: { flex: 1, color: 'white', paddingVertical: 15, fontSize: 16 },
-  sectionTitle: { color: 'white', fontSize: 20, fontWeight: 'bold', marginVertical: 15 },
-  genreGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  searchBar: {
+    flex: 1,
+    color: 'white',
+    paddingVertical: 15,
+    fontSize: 16,
+  },
+  catalogHint: {
+    color: '#6B7280',
+    fontSize: 12,
+    marginBottom: 18,
+    fontWeight: '700',
+  },
+  loader: { marginBottom: 20 },
+  sectionTitle: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginVertical: 15,
+  },
+  genreGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   genreCard: {
     width: '48%',
     backgroundColor: 'rgba(168, 85, 247, 0.08)',
@@ -183,8 +223,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(168, 85, 247, 0.3)',
   },
-  genreText: { color: '#E9D5FF', fontWeight: 'bold', fontSize: 16 },
-  resultItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  genreText: {
+    color: '#E9D5FF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   albumCover: {
     width: 60,
     height: 60,
@@ -195,8 +243,27 @@ const styles = StyleSheet.create({
     borderColor: '#222',
   },
   infoContainer: { flex: 1 },
-  albumTitle: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  artistName: { color: '#A855F7', fontSize: 14, marginTop: 4 },
+  albumTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  artistName: {
+    color: '#A855F7',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  sourceBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    color: '#D1D5DB',
+    fontSize: 11,
+    fontWeight: '800',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   emptyState: {
     marginTop: 20,
     backgroundColor: '#0A0A0A',
@@ -205,8 +272,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1A1A1A',
   },
-  emptyTitle: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
-  emptyText: { color: '#9CA3AF', lineHeight: 20 },
+  emptyTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptyText: {
+    color: '#9CA3AF',
+    lineHeight: 20,
+  },
 });
 
 export default SearchScreen;

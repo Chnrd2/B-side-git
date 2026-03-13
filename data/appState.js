@@ -75,10 +75,26 @@ export const createRandomColor = () =>
 
 export const createListEntry = (album) => ({
   ...album,
+  backendId: album?.backendId || null,
+  albumId: album?.albumId || album?.id || createId('album'),
   entryId: album?.entryId || createId('list-entry'),
 });
 
 export const normalizeListVisibility = (isPublic) => isPublic !== false;
+
+const getValidDate = (value) => {
+  const nextDate = value ? new Date(value) : new Date();
+  return Number.isNaN(nextDate.getTime()) ? new Date() : nextDate;
+};
+
+const toIsoDate = (value) => getValidDate(value).toISOString();
+const createRelativeIso = ({ days = 0, hours = 0, minutes = 0 }) => {
+  const nextDate = new Date();
+  nextDate.setDate(nextDate.getDate() - days);
+  nextDate.setHours(nextDate.getHours() - hours);
+  nextDate.setMinutes(nextDate.getMinutes() - minutes);
+  return nextDate.toISOString();
+};
 
 const DEFAULT_THEME_PRESET = PROFILE_THEME_PRESETS[0];
 
@@ -285,19 +301,25 @@ export const createInitialLists = () => [
 
 export const normalizeComment = (comment = {}) => ({
   id: comment?.id || createId('comment'),
+  backendId: comment?.backendId || null,
   user: normalizeHandle(comment?.user || CURRENT_USER_HANDLE),
   text: comment?.text || '',
   createdLabel: comment?.createdLabel || 'Ahora',
+  createdAt: toIsoDate(comment?.createdAt),
 });
 
 export const normalizeReview = (review = {}) => ({
   id: review?.id || createId('review'),
+  backendId: review?.backendId || null,
+  userId: review?.userId || null,
   user: normalizeHandle(review?.user || CURRENT_USER_HANDLE),
+  albumId: review?.albumId || review?.albumTitle || createId('album'),
   albumTitle: review?.albumTitle || 'Album',
   artist: review?.artist || '',
   rating: Number.isFinite(review?.rating) ? review.rating : 0,
   text: review?.text || '',
   cover: review?.cover || '',
+  previewUrl: review?.previewUrl || '',
   scratchedBy: review?.scratchedBy ? normalizeHandle(review.scratchedBy) : null,
   likedBy: Array.isArray(review?.likedBy)
     ? [...new Set(review.likedBy.map((handle) => normalizeHandle(handle)))]
@@ -305,6 +327,8 @@ export const normalizeReview = (review = {}) => ({
   comments: Array.isArray(review?.comments)
     ? review.comments.map((comment) => normalizeComment(comment))
     : [],
+  createdAt: toIsoDate(review?.createdAt),
+  contextType: review?.contextType || 'standard',
 });
 
 export const createInitialReviews = () => [
@@ -324,8 +348,11 @@ export const createInitialReviews = () => [
         user: '@fran_bside',
         text: 'Ese disco envejecio mejor de lo que parecia.',
         createdLabel: 'Hace 2 h',
+        createdAt: createRelativeIso({ hours: 2 }),
       },
     ],
+    createdAt: createRelativeIso({ hours: 4 }),
+    contextType: 'while-listening',
   }),
   normalizeReview({
     id: 'review-2',
@@ -343,14 +370,64 @@ export const createInitialReviews = () => [
         user: '@marianitooo',
         text: 'Lo mejor del album es como entra el track 4.',
         createdLabel: 'Hace 40 min',
+        createdAt: createRelativeIso({ minutes: 40 }),
       },
       {
         id: 'comment-3',
         user: '@coni_music',
         text: 'No esperaba ese cierre. Muy arriba.',
         createdLabel: 'Hace 20 min',
+        createdAt: createRelativeIso({ minutes: 20 }),
       },
     ],
+    createdAt: createRelativeIso({ hours: 1 }),
+  }),
+];
+
+export const normalizeListeningEntry = (entry = {}) => ({
+  id: entry?.id || createId('listen'),
+  albumId: entry?.albumId || entry?.id || createId('album'),
+  title: entry?.title || entry?.albumTitle || 'Album',
+  artist: entry?.artist || '',
+  cover: entry?.cover || '',
+  previewUrl: entry?.previewUrl || '',
+  source: entry?.source || 'manual',
+  createdAt: toIsoDate(entry?.createdAt || entry?.playedAt),
+});
+
+export const normalizeListeningHistory = (history = []) =>
+  Array.isArray(history) ? history.map((entry) => normalizeListeningEntry(entry)) : [];
+
+export const createInitialListeningHistory = () => [
+  normalizeListeningEntry({
+    id: 'listen-1',
+    albumId: 'serotonina',
+    title: 'Serotonina',
+    artist: 'Khea',
+    cover:
+      'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/4b/3e/2e/4b3e2e5c-9c9e-0e9e-5e5e-5e5e5e5e5e5e/196362125692.jpg/600x600bb.jpg',
+    source: 'profile-top5',
+    createdAt: createRelativeIso({ minutes: 18 }),
+  }),
+  normalizeListeningEntry({
+    id: 'listen-2',
+    albumId: 'manana-sera-bonito',
+    title: 'Manana Sera Bonito',
+    artist: 'KAROL G',
+    cover:
+      'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/78/ba/95/78ba95d1-c11c-54b9-d77c-7038d594f6ad/23UMGIM16882.rgb.jpg/600x600bb.jpg',
+    source: 'friend-activity',
+    createdAt: createRelativeIso({ days: 1, hours: 3 }),
+  }),
+  normalizeListeningEntry({
+    id: 'listen-3',
+    albumId: 'saturno',
+    title: 'SATURNO',
+    artist: 'Rauw Alejandro',
+    cover:
+      'https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/c9/83/40/c9834007-6390-e8d7-06f4-295f3cc9bfe5/196589642531.jpg/600x600bb.jpg',
+    source: 'discovery',
+    createdAt: createRelativeIso({ days: 2, hours: 2 }),
   }),
 ];
 
@@ -433,11 +510,17 @@ export const createInitialChats = () => [
 
 export const normalizeNotification = (notification = {}) => ({
   id: notification?.id || createId('notification'),
+  backendId: notification?.backendId || null,
   type: notification?.type || 'product',
   title: notification?.title || 'Actividad en B-Side',
   body: notification?.body || '',
   timeLabel: notification?.timeLabel || 'Ahora',
   read: Boolean(notification?.read),
+  actorId: notification?.actorId || null,
+  actorHandle: notification?.actorHandle || '',
+  entityType: notification?.entityType || 'social',
+  entityId: notification?.entityId || null,
+  createdAt: toIsoDate(notification?.createdAt),
 });
 
 export const normalizeHandleList = (handles = []) =>
@@ -461,6 +544,7 @@ export const createInitialNotifications = () => [
     title: 'Fran comento tu resena',
     body: '"Serotonina" ya tiene una respuesta en el feed.',
     timeLabel: 'Hace 2 h',
+    createdAt: createRelativeIso({ hours: 2 }),
     read: false,
   }),
   normalizeNotification({
@@ -469,6 +553,7 @@ export const createInitialNotifications = () => [
     title: 'Auth real listo para conectar',
     body: 'Cuando quieras, completa .env y corre el schema inicial de Supabase.',
     timeLabel: 'Hace 1 h',
+    createdAt: createRelativeIso({ hours: 1 }),
     read: false,
   }),
   normalizeNotification({
@@ -477,6 +562,7 @@ export const createInitialNotifications = () => [
     title: 'Plus queda bien en freemium',
     body: 'Personalizacion, stats y extras premium suman sin romper la base gratis.',
     timeLabel: 'Ayer',
+    createdAt: createRelativeIso({ days: 1 }),
     read: true,
   }),
 ];
@@ -489,6 +575,7 @@ export const createInitialState = () => ({
   currentUser: normalizeUser(DEFAULT_CURRENT_USER),
   lists: createInitialLists(),
   reviews: createInitialReviews(),
+  listeningHistory: createInitialListeningHistory(),
   top5: [],
   chats: createInitialChats(),
   notifications: createInitialNotifications(),
@@ -505,6 +592,7 @@ export const normalizeList = (list) => {
 
   return {
     id: list?.id || createId('list'),
+    backendId: list?.backendId || null,
     name: list?.name || 'Nueva lista',
     color: list?.color || createRandomColor(),
     isPublic: normalizeListVisibility(list?.isPublic),

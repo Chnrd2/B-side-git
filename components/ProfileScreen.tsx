@@ -13,7 +13,9 @@ import {
   Ban,
   Disc,
   Edit2,
+  Flame,
   Flag,
+  Headphones,
   LogOut,
   Shield,
   Trash2,
@@ -51,6 +53,9 @@ const ProfileScreen = ({
   isBlocked,
   followersCount = 0,
   followingCount = 0,
+  listeningStreak,
+  recentListening = [],
+  onOpenReviewWhileListening,
   isPublic,
 }) => {
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
@@ -59,11 +64,17 @@ const ProfileScreen = ({
   const profileHandle = `@${user?.handle}`;
   const profileTheme = buildProfileTheme(user);
   const profileReviews =
-    reviews?.filter((review) => {
-      const isOwner = review.user === profileHandle;
-      const hasScratched = review.scratchedBy === profileHandle;
-      return isPublic ? isOwner : isOwner || hasScratched;
-    }) || [];
+    reviews
+      ?.filter((review) => {
+        const isOwner = review.user === profileHandle;
+        const hasScratched = review.scratchedBy === profileHandle;
+        return isPublic ? isOwner : isOwner || hasScratched;
+      })
+      .sort((left, right) => {
+        const leftTime = left?.createdAt ? new Date(left.createdAt).getTime() : 0;
+        const rightTime = right?.createdAt ? new Date(right.createdAt).getTime() : 0;
+        return rightTime - leftTime;
+      }) || [];
   const statItems = [
     { label: 'Seguidores', value: followersCount },
     { label: 'Siguiendo', value: followingCount },
@@ -141,6 +152,68 @@ const ProfileScreen = ({
       </ScrollView>
     </View>
   );
+
+  const renderListeningSection = () => {
+    if (isPublic) return null;
+
+    const latestListen = recentListening[0];
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Tu ritmo</Text>
+        <View style={styles.listeningCard}>
+          <View style={styles.listeningHeader}>
+            <View style={styles.listeningBadge}>
+              <Flame color="#FDBA74" size={16} />
+              <Text style={styles.listeningBadgeText}>
+                {listeningStreak?.current || 0} dias seguidos
+              </Text>
+            </View>
+            <Text style={styles.listeningMeta}>
+              {listeningStreak?.last7DaysCount || 0} escuchas esta semana
+            </Text>
+          </View>
+
+          {latestListen ? (
+            <View style={styles.latestListenRow}>
+              {latestListen.cover ? (
+                <Image
+                  source={{ uri: latestListen.cover }}
+                  style={styles.latestListenCover}
+                />
+              ) : (
+                <View style={styles.latestListenPlaceholder}>
+                  <Headphones color="#A855F7" size={18} />
+                </View>
+              )}
+              <View style={styles.latestListenInfo}>
+                <Text style={styles.latestListenEyebrow}>ULTIMA ESCUCHA</Text>
+                <Text style={styles.latestListenTitle} numberOfLines={1}>
+                  {latestListen.title}
+                </Text>
+                <Text style={styles.latestListenArtist} numberOfLines={1}>
+                  {latestListen.artist}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={[
+              styles.reviewWhileListeningButton,
+              !currentTrack && styles.reviewWhileListeningButtonDisabled,
+            ]}
+            disabled={!currentTrack}
+            onPress={() => onOpenReviewWhileListening?.()}>
+            <Headphones color="white" size={18} />
+            <Text style={styles.reviewWhileListeningText}>
+              Review while listening
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   const renderReviewsSection = () => (
     <View style={styles.section}>
@@ -298,6 +371,7 @@ const ProfileScreen = ({
           </View>
         ) : (
           <>
+            {renderListeningSection()}
             {renderTopSection()}
             {renderReviewsSection()}
           </>
@@ -454,6 +528,84 @@ const styles = StyleSheet.create({
   blockedText: {
     color: '#D1D5DB',
     lineHeight: 21,
+  },
+  listeningCard: {
+    marginHorizontal: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.18)',
+    backgroundColor: 'rgba(7, 10, 18, 0.84)',
+    padding: 18,
+    gap: 16,
+  },
+  listeningHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    alignItems: 'center',
+  },
+  listeningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(249,115,22,0.14)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  listeningBadgeText: {
+    color: '#FED7AA',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  listeningMeta: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  latestListenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  latestListenCover: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+  },
+  latestListenPlaceholder: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    backgroundColor: '#111827',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  latestListenInfo: { flex: 1, gap: 4 },
+  latestListenEyebrow: {
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  latestListenTitle: { color: 'white', fontSize: 18, fontWeight: '900' },
+  latestListenArtist: { color: '#D1D5DB', fontSize: 14 },
+  reviewWhileListeningButton: {
+    minHeight: 50,
+    borderRadius: 18,
+    backgroundColor: '#8A2BE2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reviewWhileListeningButtonDisabled: {
+    opacity: 0.5,
+  },
+  reviewWhileListeningText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 14,
   },
   section: { marginTop: 28 },
   sectionTitle: {

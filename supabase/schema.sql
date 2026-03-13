@@ -121,11 +121,38 @@ create table if not exists public.subscriptions (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.listening_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  album_id text not null,
+  album_title text not null,
+  album_artist text not null default '',
+  cover_url text not null default '',
+  preview_url text not null default '',
+  source text not null default 'player',
+  created_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  recipient_id uuid not null references public.profiles (id) on delete cascade,
+  actor_id uuid references public.profiles (id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text not null default '',
+  entity_type text not null default 'social',
+  entity_id text,
+  read boolean not null default false,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists reviews_user_id_idx on public.reviews (user_id);
 create index if not exists review_comments_review_id_idx on public.review_comments (review_id);
 create index if not exists lists_user_id_idx on public.lists (user_id);
 create index if not exists messages_pair_idx on public.messages (sender_id, receiver_id, created_at desc);
 create index if not exists reports_status_idx on public.reports (status, created_at desc);
+create index if not exists listening_events_user_id_idx on public.listening_events (user_id, created_at desc);
+create index if not exists notifications_recipient_id_idx on public.notifications (recipient_id, created_at desc);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -184,62 +211,75 @@ alter table public.blocks enable row level security;
 alter table public.messages enable row level security;
 alter table public.reports enable row level security;
 alter table public.subscriptions enable row level security;
+alter table public.listening_events enable row level security;
+alter table public.notifications enable row level security;
 
+drop policy if exists "Profiles are readable" on public.profiles;
 create policy "Profiles are readable"
 on public.profiles
 for select
 using (true);
 
+drop policy if exists "Users manage own profile" on public.profiles;
 create policy "Users manage own profile"
 on public.profiles
 for all
 using (auth.uid() = id)
 with check (auth.uid() = id);
 
+drop policy if exists "Reviews are readable" on public.reviews;
 create policy "Reviews are readable"
 on public.reviews
 for select
 using (true);
 
+drop policy if exists "Users manage own reviews" on public.reviews;
 create policy "Users manage own reviews"
 on public.reviews
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+drop policy if exists "Review likes are readable" on public.review_likes;
 create policy "Review likes are readable"
 on public.review_likes
 for select
 using (true);
 
+drop policy if exists "Users manage own likes" on public.review_likes;
 create policy "Users manage own likes"
 on public.review_likes
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+drop policy if exists "Review comments are readable" on public.review_comments;
 create policy "Review comments are readable"
 on public.review_comments
 for select
 using (true);
 
+drop policy if exists "Users manage own comments" on public.review_comments;
 create policy "Users manage own comments"
 on public.review_comments
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+drop policy if exists "Lists are readable when public or owner" on public.lists;
 create policy "Lists are readable when public or owner"
 on public.lists
 for select
 using (is_public or auth.uid() = user_id);
 
+drop policy if exists "Users manage own lists" on public.lists;
 create policy "Users manage own lists"
 on public.lists
 for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+drop policy if exists "List items readable with list access" on public.list_items;
 create policy "List items readable with list access"
 on public.list_items
 for select
@@ -252,6 +292,7 @@ using (
   )
 );
 
+drop policy if exists "Users manage items in own lists" on public.list_items;
 create policy "Users manage items in own lists"
 on public.list_items
 for all
@@ -272,49 +313,184 @@ with check (
   )
 );
 
+drop policy if exists "Users read follows" on public.follows;
 create policy "Users read follows"
 on public.follows
 for select
 using (true);
 
+drop policy if exists "Users manage own follows" on public.follows;
 create policy "Users manage own follows"
 on public.follows
 for all
 using (auth.uid() = follower_id)
 with check (auth.uid() = follower_id);
 
+drop policy if exists "Users read own blocks" on public.blocks;
 create policy "Users read own blocks"
 on public.blocks
 for select
 using (auth.uid() = blocker_id);
 
+drop policy if exists "Users manage own blocks" on public.blocks;
 create policy "Users manage own blocks"
 on public.blocks
 for all
 using (auth.uid() = blocker_id)
 with check (auth.uid() = blocker_id);
 
+drop policy if exists "Users read own messages" on public.messages;
 create policy "Users read own messages"
 on public.messages
 for select
 using (auth.uid() = sender_id or auth.uid() = receiver_id);
 
+drop policy if exists "Users send own messages" on public.messages;
 create policy "Users send own messages"
 on public.messages
 for insert
 with check (auth.uid() = sender_id);
 
+drop policy if exists "Users read own reports" on public.reports;
 create policy "Users read own reports"
 on public.reports
 for select
 using (auth.uid() = reporter_id);
 
+drop policy if exists "Users create own reports" on public.reports;
 create policy "Users create own reports"
 on public.reports
 for insert
 with check (auth.uid() = reporter_id);
 
+drop policy if exists "Users read own subscription" on public.subscriptions;
 create policy "Users read own subscription"
 on public.subscriptions
 for select
 using (auth.uid() = user_id);
+
+drop policy if exists "Users read own listening events" on public.listening_events;
+create policy "Users read own listening events"
+on public.listening_events
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "Users insert own listening events" on public.listening_events;
+create policy "Users insert own listening events"
+on public.listening_events
+for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "Users read own notifications" on public.notifications;
+create policy "Users read own notifications"
+on public.notifications
+for select
+using (auth.uid() = recipient_id);
+
+drop policy if exists "Users update own notifications" on public.notifications;
+create policy "Users update own notifications"
+on public.notifications
+for update
+using (auth.uid() = recipient_id)
+with check (auth.uid() = recipient_id);
+
+drop policy if exists "Users create notifications as actor" on public.notifications;
+create policy "Users create notifications as actor"
+on public.notifications
+for insert
+with check (
+  auth.uid() = actor_id
+  and recipient_id <> auth.uid()
+);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values
+  ('avatars', 'avatars', true, 10485760, array['image/*']),
+  ('wallpapers', 'wallpapers', true, 10485760, array['image/*'])
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Avatar public read" on storage.objects;
+create policy "Avatar public read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'avatars');
+
+drop policy if exists "Avatar insert own folder" on storage.objects;
+create policy "Avatar insert own folder"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);
+
+drop policy if exists "Avatar update own folder" on storage.objects;
+create policy "Avatar update own folder"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+)
+with check (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);
+
+drop policy if exists "Avatar delete own folder" on storage.objects;
+create policy "Avatar delete own folder"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'avatars'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);
+
+drop policy if exists "Wallpaper public read" on storage.objects;
+create policy "Wallpaper public read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'wallpapers');
+
+drop policy if exists "Wallpaper insert own folder" on storage.objects;
+create policy "Wallpaper insert own folder"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'wallpapers'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);
+
+drop policy if exists "Wallpaper update own folder" on storage.objects;
+create policy "Wallpaper update own folder"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'wallpapers'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+)
+with check (
+  bucket_id = 'wallpapers'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);
+
+drop policy if exists "Wallpaper delete own folder" on storage.objects;
+create policy "Wallpaper delete own folder"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'wallpapers'
+  and (storage.foldername(name))[1] = (select auth.jwt()->>'sub')
+);

@@ -37,7 +37,13 @@ function MainTabs({ app }) {
       <Tab.Screen name="FeedTab">
         {({ navigation }) => (
           <FeedScreen
-            reviews={app.visibleReviews}
+            reviews={app.feedReviews}
+            currentUserHandle={`@${app.currentUser.handle}`}
+            currentTrack={app.currentTrack}
+            listeningStreak={app.listeningStreak}
+            friendActivity={app.friendActivity}
+            interestingUsers={app.interestingUsers}
+            interestingAlbums={app.interestingAlbums}
             hasUnreadMessages={app.hasUnreadMessages}
             hasUnreadNotifications={app.hasUnreadNotifications}
             onDeleteReview={app.deleteReview}
@@ -53,6 +59,11 @@ function MainTabs({ app }) {
             onToggleLikeReview={app.toggleReviewLike}
             onAddReviewComment={app.addReviewComment}
             onOpenInbox={() => navigation.getParent()?.navigate('Inbox')}
+            onOpenReviewWhileListening={app.openReviewWhileListening}
+            onSelectAlbum={(album) =>
+              navigation.getParent()?.navigate('AlbumDetail', { album })
+            }
+            onPlaySong={app.playTrack}
             onOpenNotifications={() => {
               app.markNotificationsAsRead();
               navigation.getParent()?.navigate('Notifications');
@@ -106,6 +117,9 @@ function MainTabs({ app }) {
             isProfileSaving={app.isProfileSaving}
             followersCount={app.currentUser.followersCount}
             followingCount={app.currentUser.followingCount}
+            listeningStreak={app.listeningStreak}
+            recentListening={app.recentListening}
+            onOpenReviewWhileListening={app.openReviewWhileListening}
             isPublic={false}
           />
         )}
@@ -217,6 +231,9 @@ export default function AppNavigator({ app }) {
               isBlocked={app.isBlockedHandle(route.params.userHandle)}
               followersCount={viewedUser?.followersCount || 0}
               followingCount={viewedUser?.followingCount || 0}
+              listeningStreak={app.listeningStreak}
+              recentListening={[]}
+              onOpenReviewWhileListening={app.openReviewWhileListening}
               isPublic={true}
             />
           );

@@ -38,7 +38,7 @@ npm run supabase:check
 
 1. Abrir el SQL Editor.
 2. Copiar el contenido de `supabase/schema.sql`.
-3. Ejecutarlo una sola vez.
+3. Ejecutarlo.
 
 Eso crea:
 
@@ -53,13 +53,21 @@ Eso crea:
 - suscripciones
 
 Tambien deja triggers para crear perfil y suscripcion free al registrarse.
+Y ahora tambien deja preparados los buckets `avatars` y `wallpapers` con
+politicas para que cada usuario solo suba archivos dentro de su propia carpeta.
 
 ## 4. Storage
 
-Crear estos buckets:
+Si corriste una version vieja de `supabase/schema.sql`, puedes elegir una de estas dos opciones:
+
+- volver a ejecutar `supabase/schema.sql`, que ahora es re-ejecutable
+- o correr solo `supabase/storage-setup.sql` para crear/actualizar Storage
 
 - `avatars`
 - `wallpapers`
+
+Si prefieres hacerlo a mano desde `Storage`, deben existir ambos buckets para que
+foto de perfil y wallpaper funcionen.
 
 ## 5. URL Configuration
 
@@ -80,6 +88,7 @@ Recomendacion simple para arrancar con seguridad:
 - avatars: bucket publico o firmado, pero con revision manual antes de exponer la imagen.
 - wallpapers: igual que avatars, porque tambien son contenido generado por usuarios.
 - no confiar en URLs externas pegadas por el usuario para produccion sin pasarlas por revision o proxy.
+- correr `npm run supabase:check` despues de tocar Storage para confirmar si los buckets ya aparecen como `ok`.
 
 ## 6. Primer flujo real para implementar
 

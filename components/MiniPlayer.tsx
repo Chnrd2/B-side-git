@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ActivityIndicator, Platform, Modal, Animated } from 'react-native';
-import { Play, Pause, X, ChevronDown, SkipBack, SkipForward, Repeat, Share2 } from 'lucide-react-native';
+import { Play, Pause, X, ChevronDown, SkipBack, SkipForward, Repeat, Share2, Headphones } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 // ACÁ ESTÁ EL CAMBIO DE LIBRERÍA:
 import { Slider } from '@miblanchard/react-native-slider';
@@ -40,7 +40,7 @@ const Visualizer = ({ isPlaying }) => {
 };
 
 // --- MINI PLAYER PRINCIPAL ---
-const MiniPlayer = ({ currentTrack, onClose }) => {
+const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -136,6 +136,16 @@ const MiniPlayer = ({ currentTrack, onClose }) => {
             <Visualizer isPlaying={isPlaying} />
           </View>
 
+          <TouchableOpacity
+            style={styles.reviewCta}
+            onPress={() => {
+              onOpenReview?.();
+              setIsExpanded(false);
+            }}>
+            <Headphones color="#E9D5FF" size={18} />
+            <Text style={styles.reviewCtaText}>Review while listening</Text>
+          </TouchableOpacity>
+
           <View style={styles.sliderContainer}>
             <Slider
               minimumValue={0}
@@ -182,6 +192,20 @@ const styles = StyleSheet.create({
   fullMeta: { marginTop: 40, flexDirection: 'row', alignItems: 'center' },
   fullTitle: { color: 'white', fontSize: 26, fontWeight: '900' },
   fullArtist: { color: '#8A2BE2', fontSize: 18, marginTop: 5, fontWeight: 'bold' },
+  reviewCta: {
+    marginTop: 22,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(196,181,253,0.18)',
+    backgroundColor: 'rgba(88, 28, 135, 0.28)',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  reviewCtaText: { color: '#F5F3FF', fontWeight: '800', fontSize: 14 },
   vizContainer: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 40, width: 40 },
   vizBar: { width: 4, backgroundColor: '#8A2BE2', borderRadius: 2 },
   sliderContainer: { marginTop: 30 },

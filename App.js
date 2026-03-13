@@ -59,6 +59,7 @@ export default function App() {
           <MiniPlayer
             currentTrack={app.currentTrack}
             onClose={app.closeTrack}
+            onOpenReview={app.openReviewWhileListening}
           />
 
           <AddToListModal
@@ -86,6 +87,7 @@ export default function App() {
             }
             initialText={app.editingReview?.text}
             initialRating={app.editingReview?.rating}
+            contextType={app.reviewContext?.origin}
             onCancel={app.closeReviewModal}
             onPublish={app.publishReview}
           />

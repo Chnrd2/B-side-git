@@ -3,13 +3,19 @@ import { useEffect, useMemo, useState } from 'react';
 
 import {
   CURRENT_USER_HANDLE,
+  MOCK_USERS,
   buildDemoSocialGraph,
   buildViewedUser,
   createId,
   createInitialState,
   createListEntry,
   createRandomColor,
+  normalizeComment,
   normalizeHandle,
+  normalizeListeningEntry,
+  normalizeList,
+  normalizeNotification,
+  normalizeReview,
 } from '../data/appState';
 import {
   PROFILE_ASSET_MODERATION,
@@ -20,19 +26,38 @@ import {
 } from '../lib/profileAssets';
 import { loadAppState, saveAppState } from '../lib/storage';
 import {
+  createBackendNotification,
   getAuthenticatedProfileSnapshot,
+  createListRecord,
+  createListeningEventRecord,
+  createReviewCommentRecord,
+  createReviewRecord,
+  dismissBackendNotification,
+  fetchBackendNotifications,
+  fetchCommunityFeedReviews,
+  fetchCommunityProfiles,
+  fetchCurrentUserListeningHistory,
   fetchSocialSnapshot,
+  fetchCurrentUserLists,
+  fetchCurrentUserReviews,
   followProfileByHandle,
   getSupabaseStatus,
+  markBackendNotificationsAsRead,
   blockProfileByHandle,
   registerWithEmail,
+  replaceListItemsRecord,
   signInWithEmail,
   signOutSession,
   sendMagicLink,
   submitProfileReport,
   unfollowProfileByHandle,
   unblockProfileByHandle,
+  updateListRecord,
+  updateReviewRecord,
   upsertProfile,
+  deleteReviewRecord,
+  toggleReviewLikeRecord,
+  subscribeToUserNotifications,
 } from '../lib/supabase';
 
 const initialState = createInitialState();
@@ -51,11 +76,163 @@ const mergeReportsById = (...collections) => {
   return Array.from(reportMap.values()).slice(0, 50);
 };
 
+const getEntityMergeKey = (entity = {}, prefix) =>
+  entity?.backendId ? `${prefix}:${entity.backendId}` : `${prefix}:local:${entity.id}`;
+
+const mergeEntitiesBySource = (prefix, primary = [], secondary = []) => {
+  const entityMap = new Map();
+
+  [...primary, ...secondary].forEach((entity) => {
+    entityMap.set(getEntityMergeKey(entity, prefix), entity);
+  });
+
+  return Array.from(entityMap.values());
+};
+
+const mergeListeningCollections = (...collections) => {
+  const entryMap = new Map();
+
+  collections.flat().forEach((entry) => {
+    const normalizedEntry = normalizeListeningEntry(entry);
+    const entryKey = `${normalizedEntry.albumId}:${normalizedEntry.createdAt}`;
+    entryMap.set(entryKey, normalizedEntry);
+  });
+
+  return Array.from(entryMap.values())
+    .sort(
+      (left, right) =>
+        getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+    )
+    .slice(0, 80);
+};
+
 const getTimeLabel = () =>
   new Date().toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+const getTimestampValue = (value) => {
+  const nextTimestamp = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(nextTimestamp) ? 0 : nextTimestamp;
+};
+
+const getLocalDayKey = (value) => {
+  const nextDate = value ? new Date(value) : null;
+
+  if (!nextDate || Number.isNaN(nextDate.getTime())) {
+    return '';
+  }
+
+  return `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(nextDate.getDate()).padStart(2, '0')}`;
+};
+
+const getDateFromDayKey = (dayKey = '') => {
+  const [year, month, day] = dayKey.split('-').map((value) => Number(value));
+  return new Date(year, month - 1, day);
+};
+
+const createAlbumKey = (title = '', artist = '') =>
+  `${title}`.trim().toLowerCase() + `::${artist}`.trim().toLowerCase();
+
+const buildListeningStreakSummary = (history = []) => {
+  const sortedHistory = [...history].sort(
+    (left, right) =>
+      getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+  );
+  const uniqueDayKeys = [
+    ...new Set(
+      sortedHistory.map((entry) => getLocalDayKey(entry.createdAt)).filter(Boolean)
+    ),
+  ];
+  const daySet = new Set(uniqueDayKeys);
+
+  let current = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  while (true) {
+    const cursor = new Date(today);
+    cursor.setDate(today.getDate() - current);
+
+    if (!daySet.has(getLocalDayKey(cursor))) {
+      break;
+    }
+
+    current += 1;
+  }
+
+  let longest = 0;
+  let active = 0;
+  let previousDay = null;
+
+  [...uniqueDayKeys]
+    .sort((left, right) => getTimestampValue(left) - getTimestampValue(right))
+    .forEach((dayKey) => {
+      const currentDay = getDateFromDayKey(dayKey);
+
+      if (!previousDay) {
+        active = 1;
+      } else {
+        const diffInDays = Math.round(
+          (currentDay.getTime() - previousDay.getTime()) / (1000 * 60 * 60 * 24)
+        );
+        active = diffInDays === 1 ? active + 1 : 1;
+      }
+
+      longest = Math.max(longest, active);
+      previousDay = currentDay;
+    });
+
+  return {
+    current,
+    longest,
+    totalDays: uniqueDayKeys.length,
+    totalPlays: history.length,
+    last7DaysCount: sortedHistory.filter(
+      (entry) => Date.now() - getTimestampValue(entry.createdAt) <= 7 * 86400000
+    ).length,
+    lastEntry: sortedHistory[0] || null,
+  };
+};
+
+const buildReviewFeedScore = (
+  review,
+  followingSet,
+  currentUserHandle,
+  ownTasteAlbumKeys,
+  ownTasteArtistKeys
+) => {
+  const freshnessHours = Math.max(
+    0,
+    (Date.now() - getTimestampValue(review.createdAt)) / (1000 * 60 * 60)
+  );
+  const freshnessBoost = Math.max(0, 48 - freshnessHours);
+  const isFromFollowed = followingSet.has(normalizeHandle(review.user));
+  const isCurrentUserReview =
+    normalizeHandle(review.user) === normalizeHandle(currentUserHandle);
+  const albumKey = createAlbumKey(review.albumTitle, review.artist);
+  const artistKey = `${review.artist || ''}`.trim().toLowerCase();
+  const tasteBoost = ownTasteAlbumKeys.has(albumKey)
+    ? 18
+    : ownTasteArtistKeys.has(artistKey)
+      ? 10
+      : 0;
+
+  return (
+    review.likedBy.length * 3 +
+    review.comments.length * 5 +
+    (review.scratchedBy ? 2 : 0) +
+    (review.contextType === 'while-listening' ? 8 : 0) +
+    (isFromFollowed ? 24 : 0) +
+    (isCurrentUserReview ? 12 : 0) +
+    tasteBoost +
+    freshnessBoost
+  );
+};
 
 export default function useBSideApp() {
   const [isLoading, setIsLoading] = useState(true);
@@ -63,6 +240,9 @@ export default function useBSideApp() {
 
   const [currentUser, setCurrentUser] = useState(initialState.currentUser);
   const [reviews, setReviews] = useState(initialState.reviews);
+  const [listeningHistory, setListeningHistory] = useState(
+    initialState.listeningHistory
+  );
   const [lists, setLists] = useState(initialState.lists);
   const [top5, setTop5] = useState(initialState.top5);
   const [globalChats, setGlobalChats] = useState(initialState.chats);
@@ -81,6 +261,7 @@ export default function useBSideApp() {
   const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
+  const [communityProfiles, setCommunityProfiles] = useState([]);
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const [listModalAlbum, setListModalAlbum] = useState(null);
@@ -89,14 +270,18 @@ export default function useBSideApp() {
   const [isStoryVisible, setIsStoryVisible] = useState(false);
   const [editingReview, setEditingReview] = useState(null);
   const [reviewAlbum, setReviewAlbum] = useState(null);
+  const [reviewContext, setReviewContext] = useState(null);
   const [isCreatingReview, setIsCreatingReview] = useState(false);
 
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
   const supabaseStatus = useMemo(() => getSupabaseStatus(), []);
+  const currentUserHandle = normalizeHandle(
+    currentUser?.handle || CURRENT_USER_HANDLE
+  );
 
   const shareReview = useMemo(() => {
     const latestOwnReview = reviews.find(
-      (review) => review.user === CURRENT_USER_HANDLE
+      (review) => review.user === currentUserHandle
     );
 
     return latestOwnReview
@@ -111,7 +296,7 @@ export default function useBSideApp() {
           text: 'Chequea mi perfil en B-Side.',
           user: currentUser.handle,
         };
-  }, [reviews, currentUser.handle]);
+  }, [currentUser.handle, currentUserHandle, reviews]);
 
   const hasUnreadMessages = useMemo(
     () =>
@@ -152,15 +337,332 @@ export default function useBSideApp() {
       ),
     [currentUser?.handle, followingHandles]
   );
-  const currentUserWithSocialStats = useMemo(
-    () => ({
-      ...currentUser,
-      ...socialGraph.getCountsForHandle(
-        normalizeHandle(currentUser?.handle || CURRENT_USER_HANDLE)
+  const communityProfileMap = useMemo(
+    () =>
+      new Map(
+        communityProfiles.map((profile) => [
+          normalizeHandle(profile.handle),
+          profile,
+        ])
       ),
-    }),
-    [currentUser, socialGraph]
+    [communityProfiles]
   );
+  const resolveUserSnapshot = (handle) => {
+    const normalizedHandle = normalizeHandle(
+      handle || currentUser?.handle || CURRENT_USER_HANDLE
+    );
+    const backendUser = communityProfileMap.get(normalizedHandle);
+    const fallbackCounts = socialGraph.getCountsForHandle(normalizedHandle);
+
+    if (normalizedHandle === currentUserHandle) {
+      return {
+        ...currentUser,
+        followersCount: backendUser?.followersCount ?? fallbackCounts.followersCount,
+        followingCount: backendUser?.followingCount ?? fallbackCounts.followingCount,
+      };
+    }
+
+    if (backendUser) {
+      return backendUser;
+    }
+
+    return {
+      ...buildViewedUser(normalizedHandle, currentUser),
+      ...fallbackCounts,
+    };
+  };
+  const currentUserWithSocialStats = useMemo(
+    () => resolveUserSnapshot(currentUserHandle),
+    [communityProfileMap, currentUser, currentUserHandle, socialGraph]
+  );
+  const followingSet = useMemo(
+    () => new Set(followingHandles.map((handle) => normalizeHandle(handle))),
+    [followingHandles]
+  );
+  const listeningStreak = useMemo(
+    () => buildListeningStreakSummary(listeningHistory),
+    [listeningHistory]
+  );
+  const recentListening = useMemo(
+    () =>
+      [...listeningHistory]
+        .sort(
+          (left, right) =>
+            getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+        )
+        .slice(0, 6),
+    [listeningHistory]
+  );
+  const ownTasteAlbumKeys = useMemo(() => {
+    const albums = [
+      ...top5.map((album) => createAlbumKey(album.title, album.artist)),
+      ...lists.flatMap((list) =>
+        list.items.map((album) => createAlbumKey(album.title, album.artist))
+      ),
+      ...listeningHistory.map((entry) => createAlbumKey(entry.title, entry.artist)),
+      ...reviews
+        .filter((review) => normalizeHandle(review.user) === currentUserHandle)
+        .map((review) => createAlbumKey(review.albumTitle, review.artist)),
+    ];
+
+    return new Set(albums.filter(Boolean));
+  }, [currentUserHandle, listeningHistory, lists, reviews, top5]);
+  const ownTasteArtistKeys = useMemo(() => {
+    const artists = [
+      ...top5.map((album) => `${album.artist || ''}`.trim().toLowerCase()),
+      ...lists.flatMap((list) =>
+        list.items.map((album) => `${album.artist || ''}`.trim().toLowerCase())
+      ),
+      ...listeningHistory.map((entry) =>
+        `${entry.artist || ''}`.trim().toLowerCase()
+      ),
+      ...reviews
+        .filter((review) => normalizeHandle(review.user) === currentUserHandle)
+        .map((review) => `${review.artist || ''}`.trim().toLowerCase()),
+    ];
+
+    return new Set(artists.filter(Boolean));
+  }, [currentUserHandle, listeningHistory, lists, reviews, top5]);
+  const feedReviews = useMemo(
+    () =>
+      [...visibleReviews].sort((left, right) => {
+        const scoreDifference =
+          buildReviewFeedScore(
+            right,
+            followingSet,
+            currentUserHandle,
+            ownTasteAlbumKeys,
+            ownTasteArtistKeys
+          ) -
+          buildReviewFeedScore(
+            left,
+            followingSet,
+            currentUserHandle,
+            ownTasteAlbumKeys,
+            ownTasteArtistKeys
+          );
+
+        if (scoreDifference !== 0) {
+          return scoreDifference;
+        }
+
+        return (
+          getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+        );
+      }),
+    [
+      currentUserHandle,
+      followingSet,
+      ownTasteAlbumKeys,
+      ownTasteArtistKeys,
+      visibleReviews,
+    ]
+  );
+  const friendActivity = useMemo(() => {
+    const seenHandles = new Set();
+
+    return feedReviews
+      .filter((review) => {
+        const reviewHandle = normalizeHandle(review.user);
+        return (
+          followingSet.has(reviewHandle) && reviewHandle !== currentUserHandle
+        );
+      })
+      .filter((review) => {
+        const reviewHandle = normalizeHandle(review.user);
+
+        if (seenHandles.has(reviewHandle)) {
+          return false;
+        }
+
+        seenHandles.add(reviewHandle);
+        return true;
+      })
+      .slice(0, 5)
+      .map((review) => ({
+        ...review,
+        profile: resolveUserSnapshot(review.user),
+      }));
+  }, [
+    communityProfileMap,
+    currentUser,
+    currentUserHandle,
+    feedReviews,
+    followingSet,
+    socialGraph,
+  ]);
+  const interestingUsers = useMemo(
+    () =>
+      [...new Set([
+        ...Object.keys(MOCK_USERS).map((handle) => normalizeHandle(handle)),
+        ...communityProfiles.map((profile) => normalizeHandle(profile.handle)),
+      ])]
+        .filter((handle) => {
+          const normalizedHandle = normalizeHandle(handle);
+          return (
+            normalizedHandle !== currentUserHandle &&
+            !followingSet.has(normalizedHandle)
+          );
+        })
+        .map((handle) => {
+          const normalizedHandle = normalizeHandle(handle);
+          const user = resolveUserSnapshot(normalizedHandle);
+          const userReviews = visibleReviews.filter(
+            (review) => normalizeHandle(review.user) === normalizedHandle
+          );
+          const overlapArtists = [
+            ...new Set(
+              userReviews
+                .map((review) => `${review.artist || ''}`.trim().toLowerCase())
+                .filter((artist) => ownTasteArtistKeys.has(artist))
+            ),
+          ];
+          const overlapAlbums = [
+            ...new Set(
+              [...(user.top5 || []), ...userReviews]
+                .map((album) =>
+                  createAlbumKey(
+                    album.title || album.albumTitle,
+                    album.artist || album.artistName
+                  )
+                )
+                .filter((albumKey) => ownTasteAlbumKeys.has(albumKey))
+            ),
+          ];
+          const engagementScore = userReviews.reduce(
+            (accumulator, review) =>
+              accumulator + review.likedBy.length * 2 + review.comments.length * 3,
+            0
+          );
+          const score =
+            overlapAlbums.length * 18 +
+            overlapArtists.length * 10 +
+            engagementScore +
+            user.followersCount * 2;
+
+          return {
+            ...user,
+            score,
+            reason: overlapAlbums.length
+              ? `Comparte tu onda con ${overlapAlbums[0].split('::')[0]}`
+              : overlapArtists.length
+                ? `Tiene afinidad con ${overlapArtists[0]}`
+                : user.followersCount
+                  ? `${user.followersCount} seguidores en B-Side`
+                  : 'Perfil activo para descubrir musica',
+          };
+        })
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 4),
+    [
+      communityProfiles,
+      currentUser,
+      currentUserHandle,
+      followingSet,
+      ownTasteAlbumKeys,
+      ownTasteArtistKeys,
+      communityProfileMap,
+      socialGraph,
+      visibleReviews,
+    ]
+  );
+  const interestingAlbums = useMemo(() => {
+    const albumMap = new Map();
+    const addCandidate = (album, metadata = {}) => {
+      const albumKey = createAlbumKey(
+        album.title || album.albumTitle,
+        album.artist || album.artistName
+      );
+
+      if (!albumKey || ownTasteAlbumKeys.has(albumKey)) {
+        return;
+      }
+
+      const existingAlbum = albumMap.get(albumKey) || {
+        id: album.id || album.albumId || albumKey,
+        albumId: album.albumId || album.id || albumKey,
+        title: album.title || album.albumTitle,
+        artist: album.artist || album.artistName || '',
+        cover: album.cover || album.cover_url || '',
+        previewUrl: album.previewUrl || '',
+        score: 0,
+        reasons: [],
+      };
+
+      existingAlbum.score += metadata.score || 0;
+
+      if (metadata.reason) {
+        existingAlbum.reasons.push(metadata.reason);
+      }
+
+      albumMap.set(albumKey, existingAlbum);
+    };
+
+    feedReviews.forEach((review) => {
+      const fromFollowed = followingSet.has(normalizeHandle(review.user));
+
+      if (normalizeHandle(review.user) === currentUserHandle) {
+        return;
+      }
+
+      addCandidate(
+        {
+          id: review.albumId || review.id,
+          albumId: review.albumId,
+          title: review.albumTitle,
+          artist: review.artist,
+          cover: review.cover,
+          previewUrl: review.previewUrl,
+        },
+        {
+          score:
+            review.rating * 8 +
+            review.likedBy.length * 3 +
+            review.comments.length * 4 +
+            (ownTasteArtistKeys.has(
+              `${review.artist || ''}`.trim().toLowerCase()
+            )
+              ? 10
+              : 0) +
+            (fromFollowed ? 16 : 8),
+          reason: fromFollowed
+            ? `Lo recomienda ${review.user}`
+            : 'Tiene buena respuesta en la comunidad',
+        }
+      );
+    });
+
+    Object.entries(MOCK_USERS).forEach(([handle, user]) => {
+      const normalizedHandle = normalizeHandle(handle);
+
+      if (normalizedHandle === currentUserHandle) {
+        return;
+      }
+
+      (user.top5 || []).forEach((album, index) => {
+        addCandidate(album, {
+          score: (followingSet.has(normalizedHandle) ? 16 : 8) + (5 - index) * 2,
+          reason: followingSet.has(normalizedHandle)
+            ? `Top de ${normalizedHandle}`
+            : `Perfil destacado: ${normalizedHandle}`,
+        });
+      });
+    });
+
+    return Array.from(albumMap.values())
+      .map((album) => ({
+        ...album,
+        reason: album.reasons[0] || 'Descubrimiento recomendado',
+      }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 6);
+  }, [
+    currentUserHandle,
+    feedReviews,
+    followingSet,
+    ownTasteAlbumKeys,
+    ownTasteArtistKeys,
+  ]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -189,6 +691,8 @@ export default function useBSideApp() {
       let nextFollowingHandles = persistedState.followingHandles;
       let nextBlockedHandles = persistedState.blockedHandles;
       let nextReports = persistedState.reports;
+      let nextReviews = persistedState.reviews;
+      let nextLists = persistedState.lists;
 
       if (supabaseStatus.isConfigured) {
         const snapshot = await getAuthenticatedProfileSnapshot(
@@ -212,25 +716,26 @@ export default function useBSideApp() {
               sessionMode: 'authenticated',
             };
 
-            const socialSnapshot = await fetchSocialSnapshot(snapshot.session.user.id);
+            const remoteState = await loadAuthenticatedCollections({
+              userId: snapshot.session.user.id,
+              fallbackHandle: snapshot.user.handle || nextCurrentUser.handle,
+              localReviews: persistedState.reviews,
+              localLists: persistedState.lists,
+              localFollowingHandles: persistedState.followingHandles,
+              localBlockedHandles: persistedState.blockedHandles,
+              localReports: persistedState.reports,
+            });
 
             if (!isMounted) return;
 
-            if (socialSnapshot.ok) {
-              nextFollowingHandles = mergeHandleCollections(
-                persistedState.followingHandles,
-                socialSnapshot.followingHandles
-              );
-              nextBlockedHandles = mergeHandleCollections(
-                persistedState.blockedHandles,
-                socialSnapshot.blockedHandles
-              );
-              nextReports = mergeReportsById(
-                socialSnapshot.reports,
-                persistedState.reports
-              );
-            } else if (socialSnapshot.message) {
-              setAuthMessage(socialSnapshot.message);
+            nextFollowingHandles = remoteState.followingHandles;
+            nextBlockedHandles = remoteState.blockedHandles;
+            nextReports = remoteState.reports;
+            nextReviews = remoteState.reviews;
+            nextLists = remoteState.lists;
+
+            if (remoteState.message) {
+              setAuthMessage(remoteState.message);
             }
           }
 
@@ -241,8 +746,9 @@ export default function useBSideApp() {
       }
 
       setCurrentUser(nextCurrentUser);
-      setReviews(persistedState.reviews);
-      setLists(persistedState.lists);
+      setReviews(nextReviews);
+      setListeningHistory(persistedState.listeningHistory);
+      setLists(nextLists);
       setTop5(persistedState.top5);
       setGlobalChats(persistedState.chats);
       setNotifications(persistedState.notifications);
@@ -284,6 +790,7 @@ export default function useBSideApp() {
       saveAppState({
         currentUser,
         reviews,
+        listeningHistory,
         lists,
         top5,
         chats: globalChats,
@@ -302,6 +809,7 @@ export default function useBSideApp() {
     hasHydrated,
     currentUser,
     reviews,
+    listeningHistory,
     lists,
     top5,
     globalChats,
@@ -312,23 +820,230 @@ export default function useBSideApp() {
     preferences,
   ]);
 
+  useEffect(() => {
+    if (!hasHydrated || !supabaseStatus.isConfigured) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadCommunityCollections = async () => {
+      const [communityReviewsSnapshot, communityProfilesSnapshot] =
+        await Promise.all([
+          fetchCommunityFeedReviews(60),
+          fetchCommunityProfiles({
+            excludeUserId: authSession?.user?.id || null,
+            limit: 28,
+          }),
+        ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (communityReviewsSnapshot.ok) {
+        setReviews((prevReviews) =>
+          mergeEntitiesBySource(
+            'review',
+            communityReviewsSnapshot.reviews,
+            prevReviews
+          )
+        );
+      } else if (communityReviewsSnapshot.message) {
+        setAuthMessage((prevMessage) => prevMessage || communityReviewsSnapshot.message);
+      }
+
+      if (communityProfilesSnapshot.ok) {
+        setCommunityProfiles(communityProfilesSnapshot.users);
+      } else if (communityProfilesSnapshot.message) {
+        setAuthMessage((prevMessage) => prevMessage || communityProfilesSnapshot.message);
+      }
+    };
+
+    void loadCommunityCollections();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authSession?.user?.id, hasHydrated, supabaseStatus.isConfigured]);
+
+  useEffect(() => {
+    if (
+      !hasHydrated ||
+      !supabaseStatus.isConfigured ||
+      !authSession?.user?.id
+    ) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadAuthenticatedExtras = async () => {
+      const [remoteState, listeningSnapshot, notificationsSnapshot] =
+        await Promise.all([
+          loadAuthenticatedCollections({
+            userId: authSession.user.id,
+            fallbackHandle: currentUser.handle,
+            localReviews: reviews,
+            localLists: lists,
+            localFollowingHandles: followingHandles,
+            localBlockedHandles: blockedHandles,
+            localReports: reports,
+          }),
+          fetchCurrentUserListeningHistory(authSession.user.id),
+          fetchBackendNotifications(authSession.user.id),
+        ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setFollowingHandles(remoteState.followingHandles);
+      setBlockedHandles(remoteState.blockedHandles);
+      setReports(remoteState.reports);
+      setReviews((prevReviews) =>
+        mergeEntitiesBySource('review', remoteState.reviews, prevReviews)
+      );
+      setLists((prevLists) =>
+        mergeEntitiesBySource('list', remoteState.lists, prevLists)
+      );
+
+      if (listeningSnapshot.ok) {
+        setListeningHistory((prevHistory) =>
+          mergeListeningCollections(
+            listeningSnapshot.listeningHistory,
+            prevHistory
+          )
+        );
+      } else if (listeningSnapshot.message) {
+        setAuthMessage((prevMessage) => prevMessage || listeningSnapshot.message);
+      }
+
+      if (notificationsSnapshot.ok) {
+        setNotifications((prevNotifications) =>
+          mergeEntitiesBySource(
+            'notification',
+            notificationsSnapshot.notifications,
+            prevNotifications
+          ).slice(0, 50)
+        );
+      } else if (notificationsSnapshot.message) {
+        setAuthMessage((prevMessage) => prevMessage || notificationsSnapshot.message);
+      }
+
+      if (remoteState.message) {
+        setAuthMessage(remoteState.message);
+      }
+    };
+
+    void loadAuthenticatedExtras();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authSession?.user?.id, hasHydrated, supabaseStatus.isConfigured]);
+
+  useEffect(() => {
+    if (
+      !hasHydrated ||
+      !supabaseStatus.isConfigured ||
+      !authSession?.user?.id
+    ) {
+      return undefined;
+    }
+
+    return subscribeToUserNotifications({
+      userId: authSession.user.id,
+      onInsert: (notification) => {
+        setNotifications((prevNotifications) =>
+          mergeEntitiesBySource(
+            'notification',
+            [notification],
+            prevNotifications
+          ).slice(0, 50)
+        );
+      },
+    });
+  }, [authSession?.user?.id, hasHydrated, supabaseStatus.isConfigured]);
+
   const pushNotification = ({
     type = 'product',
     title,
     body,
     read = false,
   }) => {
-    setNotifications((prevNotifications) => [
-      {
-        id: createId('notification'),
-        type,
-        title,
-        body,
-        timeLabel: getTimeLabel(),
-        read,
-      },
-      ...prevNotifications,
-    ].slice(0, 50));
+    const nextNotification = normalizeNotification({
+      id: createId('notification'),
+      type,
+      title,
+      body,
+      timeLabel: getTimeLabel(),
+      createdAt: new Date().toISOString(),
+      read,
+    });
+
+    setNotifications((prevNotifications) =>
+      [nextNotification, ...prevNotifications].slice(0, 50)
+    );
+  };
+
+  const loadAuthenticatedCollections = async ({
+    userId,
+    fallbackHandle,
+    localReviews = [],
+    localLists = [],
+    localFollowingHandles = [],
+    localBlockedHandles = [],
+    localReports = [],
+  }) => {
+    const [socialSnapshot, remoteReviewsSnapshot, remoteListsSnapshot] =
+      await Promise.all([
+        fetchSocialSnapshot(userId),
+        fetchCurrentUserReviews(userId, fallbackHandle),
+        fetchCurrentUserLists(userId),
+      ]);
+
+    const messages = [];
+
+    const nextFollowingHandles = socialSnapshot.ok
+      ? mergeHandleCollections(
+          localFollowingHandles,
+          socialSnapshot.followingHandles
+        )
+      : localFollowingHandles;
+    const nextBlockedHandles = socialSnapshot.ok
+      ? mergeHandleCollections(localBlockedHandles, socialSnapshot.blockedHandles)
+      : localBlockedHandles;
+    const nextReports = socialSnapshot.ok
+      ? mergeReportsById(socialSnapshot.reports, localReports)
+      : localReports;
+    const nextReviews = remoteReviewsSnapshot.ok
+      ? mergeEntitiesBySource('review', localReviews, remoteReviewsSnapshot.reviews)
+      : localReviews;
+    const nextLists = remoteListsSnapshot.ok
+      ? mergeEntitiesBySource('list', localLists, remoteListsSnapshot.lists)
+      : localLists;
+
+    if (!socialSnapshot.ok && socialSnapshot.message) {
+      messages.push(socialSnapshot.message);
+    }
+
+    if (!remoteReviewsSnapshot.ok && remoteReviewsSnapshot.message) {
+      messages.push(remoteReviewsSnapshot.message);
+    }
+
+    if (!remoteListsSnapshot.ok && remoteListsSnapshot.message) {
+      messages.push(remoteListsSnapshot.message);
+    }
+
+    return {
+      followingHandles: nextFollowingHandles,
+      blockedHandles: nextBlockedHandles,
+      reports: nextReports,
+      reviews: nextReviews,
+      lists: nextLists,
+      message: messages[0] || '',
+    };
   };
 
   const applyAuthenticatedUser = (session, nextUser) => {
@@ -457,6 +1172,26 @@ export default function useBSideApp() {
 
     applyAuthenticatedUser(snapshot.session, snapshot.user);
 
+    const remoteState = await loadAuthenticatedCollections({
+      userId: snapshot.session.user.id,
+      fallbackHandle: snapshot.user.handle || fallbackUser.handle,
+      localReviews: reviews,
+      localLists: lists,
+      localFollowingHandles: followingHandles,
+      localBlockedHandles: blockedHandles,
+      localReports: reports,
+    });
+
+    setReviews(remoteState.reviews);
+    setLists(remoteState.lists);
+    setFollowingHandles(remoteState.followingHandles);
+    setBlockedHandles(remoteState.blockedHandles);
+    setReports(remoteState.reports);
+
+    if (remoteState.message) {
+      setAuthMessage(remoteState.message);
+    }
+
     return {
       ok: true,
       session: snapshot.session,
@@ -464,32 +1199,189 @@ export default function useBSideApp() {
     };
   };
 
+  const syncListDraftToBackend = async (listDraft) => {
+    if (!supabaseStatus.isConfigured || !authSession?.user?.id) {
+      return { ok: false, skipped: true };
+    }
+
+    const normalizedList = normalizeList(listDraft);
+    let backendId = normalizedList.backendId;
+
+    if (!backendId) {
+      const createResult = await createListRecord(authSession.user.id, normalizedList);
+
+      if (!createResult.ok) {
+        if (!createResult.skipped) {
+          setAuthMessage(createResult.message);
+        }
+
+        return createResult;
+      }
+
+      backendId = createResult.backendId;
+
+      setLists((prevLists) =>
+        prevLists.map((list) =>
+          list.id === normalizedList.id ? { ...list, backendId } : list
+        )
+      );
+    }
+
+    const syncedList = {
+      ...normalizedList,
+      backendId,
+    };
+
+    const updateResult = await updateListRecord(backendId, syncedList);
+
+    if (!updateResult.ok) {
+      setAuthMessage(updateResult.message);
+      return updateResult;
+    }
+
+    const itemsResult = await replaceListItemsRecord(backendId, syncedList.items);
+
+    if (!itemsResult.ok) {
+      setAuthMessage(itemsResult.message);
+      return itemsResult;
+    }
+
+    return {
+      ok: true,
+      backendId,
+    };
+  };
+
+  const syncReviewDraftToBackend = async (reviewDraft) => {
+    if (!supabaseStatus.isConfigured || !authSession?.user?.id) {
+      return { ok: false, skipped: true };
+    }
+
+    const normalizedReviewDraft = normalizeReview(reviewDraft);
+
+    if (!normalizedReviewDraft.backendId) {
+      const createResult = await createReviewRecord(
+        authSession.user.id,
+        normalizedReviewDraft
+      );
+
+      if (!createResult.ok) {
+        if (!createResult.skipped) {
+          setAuthMessage(createResult.message);
+        }
+
+        return createResult;
+      }
+
+      setReviews((prevReviews) =>
+        prevReviews.map((review) =>
+          review.id === normalizedReviewDraft.id
+            ? { ...review, backendId: createResult.backendId }
+            : review
+        )
+      );
+
+      return {
+        ok: true,
+        backendId: createResult.backendId,
+      };
+    }
+
+    const updateResult = await updateReviewRecord(
+      normalizedReviewDraft.backendId,
+      normalizedReviewDraft
+    );
+
+    if (!updateResult.ok) {
+      setAuthMessage(updateResult.message);
+      return updateResult;
+    }
+
+    return {
+      ok: true,
+      backendId: normalizedReviewDraft.backendId,
+    };
+  };
+
+  const syncDeletedReviewToBackend = async (reviewDraft) => {
+    if (
+      !supabaseStatus.isConfigured ||
+      !authSession?.user?.id ||
+      !reviewDraft?.backendId
+    ) {
+      return { ok: false, skipped: true };
+    }
+
+    const deleteResult = await deleteReviewRecord(reviewDraft.backendId);
+
+    if (!deleteResult.ok) {
+      setAuthMessage(deleteResult.message);
+    }
+
+    return deleteResult;
+  };
+
   const isCurrentUserHandle = (handle) => {
     if (!handle) return false;
 
     const normalizedHandle = normalizeHandle(handle);
 
-    return (
-      normalizedHandle === CURRENT_USER_HANDLE ||
-      normalizedHandle === `@${currentUser.handle}`
-    );
+    return normalizedHandle === CURRENT_USER_HANDLE || normalizedHandle === currentUserHandle;
   };
   const isFollowingHandle = (handle) =>
     followingHandles.includes(normalizeHandle(handle));
   const isBlockedHandle = (handle) =>
     blockedHandles.includes(normalizeHandle(handle));
 
-  const getSocialStatsForHandle = (handle) =>
-    socialGraph.getCountsForHandle(handle || normalizeHandle(currentUser.handle));
-  const getUserByHandle = (handle) => ({
-    ...buildViewedUser(handle, currentUser),
-    ...getSocialStatsForHandle(handle),
-  });
+  const getSocialStatsForHandle = (handle) => {
+    const resolvedUser = resolveUserSnapshot(handle);
+
+    return {
+      followersCount: resolvedUser?.followersCount || 0,
+      followingCount: resolvedUser?.followingCount || 0,
+    };
+  };
+  const getUserByHandle = (handle) => resolveUserSnapshot(handle);
   const getListById = (listId) => lists.find((list) => list.id === listId) || null;
   const getChatById = (chatId) =>
     globalChats.find((chat) => chat.id === chatId) || null;
 
-  const playTrack = (track) => setCurrentTrack(track);
+  const playTrack = (track) => {
+    if (!track) return;
+
+    const nextListeningEntry = normalizeListeningEntry({
+      ...track,
+      albumId: track.albumId || track.id || track.title,
+      createdAt: new Date().toISOString(),
+      source: 'player',
+    });
+    const latestSameAlbum = listeningHistory.find(
+      (entry) => entry.albumId === nextListeningEntry.albumId
+    );
+    const shouldStoreListeningEvent = !(
+      latestSameAlbum &&
+      Date.now() - getTimestampValue(latestSameAlbum.createdAt) < 20 * 60 * 1000
+    );
+
+    setCurrentTrack(track);
+    if (!shouldStoreListeningEvent) {
+      return;
+    }
+
+    setListeningHistory((prevHistory) =>
+      [nextListeningEntry, ...prevHistory].slice(0, 80)
+    );
+
+    if (supabaseStatus.isConfigured && authSession?.user?.id) {
+      void createListeningEventRecord(authSession.user.id, nextListeningEntry).then(
+        (result) => {
+          if (!result.ok && !result.skipped) {
+            setAuthMessage(result.message);
+          }
+        }
+      );
+    }
+  };
   const closeTrack = () => setCurrentTrack(null);
 
   const completeOnboarding = (sessionMode = 'guest') => {
@@ -614,6 +1506,21 @@ export default function useBSideApp() {
       isFollowingNow = true;
       return [...prevHandles, normalizedHandle];
     });
+    setCommunityProfiles((prevProfiles) =>
+      prevProfiles.map((profile) => {
+        if (normalizeHandle(profile.handle) !== normalizedHandle) {
+          return profile;
+        }
+
+        return {
+          ...profile,
+          followersCount: Math.max(
+            0,
+            (profile.followersCount || 0) + (isFollowingNow ? 1 : -1)
+          ),
+        };
+      })
+    );
 
     pushNotification({
       type: 'social',
@@ -624,7 +1531,26 @@ export default function useBSideApp() {
       read: true,
     });
 
-    void syncFollowMutation(normalizedHandle, isFollowingNow);
+    void syncFollowMutation(normalizedHandle, isFollowingNow).then((response) => {
+      if (
+        response?.ok &&
+        isFollowingNow &&
+        authSession?.user?.id &&
+        response.targetProfile?.id
+      ) {
+        return createBackendNotification({
+          recipientId: response.targetProfile.id,
+          actorId: authSession.user.id,
+          type: 'social',
+          title: `${currentUserHandle} empezo a seguirte`,
+          body: 'Tu perfil sumo un nuevo seguidor en B-Side.',
+          entityType: 'profile',
+          entityId: normalizedHandle,
+        });
+      }
+
+      return response;
+    });
 
     return isFollowingNow;
   };
@@ -635,6 +1561,7 @@ export default function useBSideApp() {
     }
 
     const normalizedHandle = normalizeHandle(handle);
+    const wasFollowingBeforeBlock = followingHandles.includes(normalizedHandle);
     let hasBlocked = false;
 
     setBlockedHandles((prevHandles) => {
@@ -648,6 +1575,20 @@ export default function useBSideApp() {
     setFollowingHandles((prevHandles) =>
       prevHandles.filter((item) => item !== normalizedHandle)
     );
+    if (wasFollowingBeforeBlock) {
+      setCommunityProfiles((prevProfiles) =>
+        prevProfiles.map((profile) => {
+          if (normalizeHandle(profile.handle) !== normalizedHandle) {
+            return profile;
+          }
+
+          return {
+            ...profile,
+            followersCount: Math.max(0, (profile.followersCount || 0) - 1),
+          };
+        })
+      );
+    }
 
     if (hasBlocked) {
       pushNotification({
@@ -988,14 +1929,37 @@ export default function useBSideApp() {
         read: true,
       }))
     );
+
+    if (authSession?.user?.id) {
+      void markBackendNotificationsAsRead(authSession.user.id).then((result) => {
+        if (!result.ok && !result.skipped) {
+          setAuthMessage(result.message);
+        }
+      });
+    }
   };
 
   const dismissNotification = (notificationId) => {
+    const targetNotification = notifications.find(
+      (notification) => notification.id === notificationId
+    );
+
     setNotifications((prevNotifications) =>
       prevNotifications.filter(
         (notification) => notification.id !== notificationId
       )
     );
+
+    if (authSession?.user?.id && (targetNotification?.backendId || notificationId)) {
+      void dismissBackendNotification(
+        targetNotification?.backendId || notificationId,
+        authSession.user.id
+      ).then((result) => {
+        if (!result.ok && !result.skipped) {
+          setAuthMessage(result.message);
+        }
+      });
+    }
   };
 
   const openCreateListModal = () => setIsCreateListVisible(true);
@@ -1010,17 +1974,18 @@ export default function useBSideApp() {
 
     if (!trimmedName) return;
 
-    const newList = {
+    const newList = normalizeList({
       id: createId('list'),
       name: trimmedName,
-      count: 0,
       color: createRandomColor(),
       isPublic: listDraft.isPublic !== false,
       items: [],
-    };
+    });
 
     setLists((prevLists) => [...prevLists, newList]);
     setIsCreateListVisible(false);
+
+    void syncListDraftToBackend(newList);
 
     pushNotification({
       type: 'product',
@@ -1072,7 +2037,7 @@ export default function useBSideApp() {
       prevReviews.map((review) => {
         if (review.id !== reviewId) return review;
 
-        const isScratched = review.scratchedBy === CURRENT_USER_HANDLE;
+        const isScratched = review.scratchedBy === currentUserHandle;
         scratchState = {
           isScratched: !isScratched,
           albumTitle: review.albumTitle,
@@ -1080,7 +2045,7 @@ export default function useBSideApp() {
 
         return {
           ...review,
-          scratchedBy: isScratched ? null : CURRENT_USER_HANDLE,
+          scratchedBy: isScratched ? null : currentUserHandle,
         };
       })
     );
@@ -1097,19 +2062,21 @@ export default function useBSideApp() {
 
   const toggleReviewLike = (reviewId) => {
     let likeState = null;
+    const targetReview = reviews.find((review) => review.id === reviewId);
 
     setReviews((prevReviews) =>
       prevReviews.map((review) => {
         if (review.id !== reviewId) return review;
 
-        const hasLiked = review.likedBy.includes(CURRENT_USER_HANDLE);
+        const hasLiked = review.likedBy.includes(currentUserHandle);
         const nextLikedBy = hasLiked
-          ? review.likedBy.filter((handle) => handle !== CURRENT_USER_HANDLE)
-          : [...review.likedBy, CURRENT_USER_HANDLE];
+          ? review.likedBy.filter((handle) => handle !== currentUserHandle)
+          : [...review.likedBy, currentUserHandle];
 
         likeState = {
           added: !hasLiked,
           albumTitle: review.albumTitle,
+          reviewBackendId: review.backendId,
         };
 
         return {
@@ -1127,6 +2094,38 @@ export default function useBSideApp() {
         read: true,
       });
     }
+
+    if (likeState?.reviewBackendId && authSession?.user?.id) {
+      void toggleReviewLikeRecord({
+        reviewBackendId: likeState.reviewBackendId,
+        userId: authSession.user.id,
+        shouldLike: Boolean(
+          targetReview && !targetReview.likedBy.includes(currentUserHandle)
+        ),
+      }).then((result) => {
+        if (!result.ok && !result.skipped) {
+          setAuthMessage(result.message);
+          return;
+        }
+
+        if (
+          result.ok &&
+          likeState?.added &&
+          targetReview?.userId &&
+          targetReview.userId !== authSession.user.id
+        ) {
+          void createBackendNotification({
+            recipientId: targetReview.userId,
+            actorId: authSession.user.id,
+            type: 'social',
+            title: `${currentUserHandle} le dio like a tu resena`,
+            body: `"${targetReview.albumTitle}" acaba de sumar un nuevo like.`,
+            entityType: 'review',
+            entityId: likeState.reviewBackendId,
+          });
+        }
+      });
+    }
   };
 
   const addReviewComment = (reviewId, commentText) => {
@@ -1135,20 +2134,24 @@ export default function useBSideApp() {
     if (!trimmedComment) return;
 
     let commentState = null;
+    let optimisticCommentId = '';
 
     setReviews((prevReviews) =>
       prevReviews.map((review) => {
         if (review.id !== reviewId) return review;
 
-        const nextComment = {
+        const nextComment = normalizeComment({
           id: createId('comment'),
-          user: CURRENT_USER_HANDLE,
+          user: currentUserHandle,
           text: trimmedComment,
           createdLabel: 'Ahora',
-        };
+        });
 
+        optimisticCommentId = nextComment.id;
         commentState = {
           albumTitle: review.albumTitle,
+          reviewBackendId: review.backendId,
+          reviewOwnerId: review.userId,
         };
 
         return {
@@ -1166,17 +2169,72 @@ export default function useBSideApp() {
         read: true,
       });
     }
+
+    if (commentState?.reviewBackendId && authSession?.user?.id) {
+      void createReviewCommentRecord({
+        reviewBackendId: commentState.reviewBackendId,
+        userId: authSession.user.id,
+        text: trimmedComment,
+        userHandle: currentUserHandle,
+      }).then((result) => {
+        if (!result.ok) {
+          setAuthMessage(result.message);
+          return;
+        }
+
+        if (!result.comment) {
+          return;
+        }
+
+        setReviews((prevReviews) =>
+          prevReviews.map((review) => {
+            if (review.id !== reviewId) return review;
+
+            return {
+              ...review,
+              comments: review.comments.map((comment) =>
+                comment.id === optimisticCommentId ? result.comment : comment
+              ),
+            };
+          })
+        );
+
+        if (
+          commentState?.reviewOwnerId &&
+          commentState.reviewOwnerId !== authSession.user.id
+        ) {
+          void createBackendNotification({
+            recipientId: commentState.reviewOwnerId,
+            actorId: authSession.user.id,
+            type: 'social',
+            title: `${currentUserHandle} comento tu resena`,
+            body: `Tu resena de "${commentState.albumTitle}" tiene una respuesta nueva.`,
+            entityType: 'review',
+            entityId: commentState.reviewBackendId,
+          });
+        }
+      });
+    }
   };
 
   const deleteReview = (reviewId) => {
+    const reviewToDelete = reviews.find((review) => review.id === reviewId);
+
     setReviews((prevReviews) =>
       prevReviews.filter((review) => review.id !== reviewId)
     );
+
+    if (reviewToDelete) {
+      void syncDeletedReviewToBackend(reviewToDelete);
+    }
   };
 
-  const openCreateReview = (album) => {
+  const openCreateReview = (album, options = {}) => {
     setEditingReview(null);
     setReviewAlbum(album);
+    setReviewContext({
+      origin: options.origin || 'standard',
+    });
     setIsCreatingReview(true);
   };
 
@@ -1187,49 +2245,100 @@ export default function useBSideApp() {
       cover: review.cover,
       artist: review.artist,
     });
+    setReviewContext({
+      origin: review.contextType || 'standard',
+    });
     setIsCreatingReview(true);
+  };
+
+  const openReviewWhileListening = () => {
+    if (!currentTrack) {
+      return false;
+    }
+
+    openCreateReview(
+      {
+        ...currentTrack,
+        albumId: currentTrack.albumId || currentTrack.id || currentTrack.title,
+      },
+      { origin: 'while-listening' }
+    );
+
+    return true;
   };
 
   const closeReviewModal = () => {
     setIsCreatingReview(false);
     setEditingReview(null);
     setReviewAlbum(null);
+    setReviewContext(null);
   };
 
   const publishReview = (data) => {
     let albumTitle = data.album;
+    let nextReview = null;
 
     if (editingReview) {
+      nextReview = normalizeReview({
+        ...editingReview,
+        userId: editingReview.userId || authSession?.user?.id || currentUser.id,
+        user: currentUserHandle,
+        text: data.text,
+        rating: data.rating,
+        contextType: editingReview.contextType || 'standard',
+      });
+
       setReviews((prevReviews) =>
         prevReviews.map((review) =>
-          review.id === editingReview.id
-            ? { ...review, text: data.text, rating: data.rating }
-            : review
+          review.id === editingReview.id ? nextReview : review
         )
       );
       albumTitle = editingReview.albumTitle;
     } else if (reviewAlbum) {
+      const contextType =
+        reviewContext?.origin === 'while-listening'
+          ? 'while-listening'
+          : 'standard';
+
+      nextReview = normalizeReview({
+        id: createId('review'),
+        userId: authSession?.user?.id || currentUser.id,
+        user: currentUserHandle,
+        albumId: reviewAlbum.id || reviewAlbum.albumId || data.album,
+        albumTitle: data.album,
+        artist: reviewAlbum.artist,
+        cover: reviewAlbum.cover,
+        previewUrl: reviewAlbum.previewUrl,
+        rating: data.rating,
+        text: data.text,
+        likedBy: [],
+        comments: [],
+        scratchedBy: null,
+        createdAt: new Date().toISOString(),
+        contextType,
+      });
+
       setReviews((prevReviews) => [
-        {
-          id: createId('review'),
-          user: CURRENT_USER_HANDLE,
-          albumTitle: data.album,
-          artist: reviewAlbum.artist,
-          cover: reviewAlbum.cover,
-          rating: data.rating,
-          text: data.text,
-          likedBy: [],
-          comments: [],
-          scratchedBy: null,
-        },
+        nextReview,
         ...prevReviews,
       ]);
     }
 
+    if (nextReview) {
+      void syncReviewDraftToBackend(nextReview);
+    }
+
     pushNotification({
       type: 'social',
-      title: editingReview ? 'Resena actualizada' : 'Resena publicada',
-      body: `"${albumTitle}" ya forma parte de tu actividad.`,
+      title: editingReview
+        ? 'Resena actualizada'
+        : reviewContext?.origin === 'while-listening'
+          ? 'Review while listening publicada'
+          : 'Resena publicada',
+      body:
+        reviewContext?.origin === 'while-listening'
+          ? `"${albumTitle}" ya quedo marcada mientras sonaba.`
+          : `"${albumTitle}" ya forma parte de tu actividad.`,
       read: true,
     });
 
@@ -1251,7 +2360,13 @@ export default function useBSideApp() {
 
     if (!targetList) return;
 
-    if (targetList.items.some((item) => item.id === listModalAlbum.id)) {
+    const nextEntry = createListEntry(listModalAlbum);
+
+    if (
+      targetList.items.some(
+        (item) => (item.albumId || item.id) === nextEntry.albumId
+      )
+    ) {
       Alert.alert(
         'Ya esta guardado',
         `"${listModalAlbum.title}" ya existe dentro de esa lista.`
@@ -1259,18 +2374,24 @@ export default function useBSideApp() {
       return;
     }
 
+    let syncedList = null;
+
     setLists((prevLists) =>
       prevLists.map((list) => {
         if (list.id !== listId) return list;
 
-        const nextItems = [...list.items, createListEntry(listModalAlbum)];
-        return {
+        const nextItems = [...list.items, nextEntry];
+        syncedList = normalizeList({
           ...list,
           items: nextItems,
-          count: nextItems.length,
-        };
+        });
+        return syncedList;
       })
     );
+
+    if (syncedList) {
+      void syncListDraftToBackend(syncedList);
+    }
 
     pushNotification({
       type: 'product',
@@ -1283,32 +2404,45 @@ export default function useBSideApp() {
   };
 
   const removeListItem = (listId, entryId) => {
+    let syncedList = null;
+
     setLists((prevLists) =>
       prevLists.map((list) => {
         if (list.id !== listId) return list;
 
         const nextItems = list.items.filter((item) => item.entryId !== entryId);
-        return {
+        syncedList = normalizeList({
           ...list,
           items: nextItems,
-          count: nextItems.length,
-        };
+        });
+        return syncedList;
       })
     );
+
+    if (syncedList) {
+      void syncListDraftToBackend(syncedList);
+    }
   };
 
   const updateListOrder = (listId, items) => {
+    let syncedList = null;
+
     setLists((prevLists) =>
-      prevLists.map((list) =>
-        list.id === listId
-          ? {
-              ...list,
-              items,
-              count: items.length,
-            }
-          : list
-      )
+      prevLists.map((list) => {
+        if (list.id !== listId) return list;
+
+        syncedList = normalizeList({
+          ...list,
+          items,
+        });
+
+        return syncedList;
+      })
     );
+
+    if (syncedList) {
+      void syncListDraftToBackend(syncedList);
+    }
   };
 
   const shuffleList = (listId) => {
@@ -1335,11 +2469,10 @@ export default function useBSideApp() {
         }
 
         shuffledTrack = nextItems[0] || null;
-        nextList = {
+        nextList = normalizeList({
           ...list,
           items: nextItems,
-          count: nextItems.length,
-        };
+        });
         return nextList;
       })
     );
@@ -1359,12 +2492,15 @@ export default function useBSideApp() {
       read: true,
     });
 
+    void syncListDraftToBackend(nextList);
+
     return true;
   };
 
   const toggleListVisibility = (listId) => {
     let nextVisibility = null;
     let listName = '';
+    let nextList = null;
 
     setLists((prevLists) =>
       prevLists.map((list) => {
@@ -1373,10 +2509,11 @@ export default function useBSideApp() {
         nextVisibility = !list.isPublic;
         listName = list.name;
 
-        return {
+        nextList = normalizeList({
           ...list,
           isPublic: nextVisibility,
-        };
+        });
+        return nextList;
       })
     );
 
@@ -1392,6 +2529,10 @@ export default function useBSideApp() {
       }.`,
       read: true,
     });
+
+    if (nextList) {
+      void syncListDraftToBackend(nextList);
+    }
 
     return nextVisibility;
   };
@@ -1545,6 +2686,13 @@ export default function useBSideApp() {
     currentUser: currentUserWithSocialStats,
     reviews,
     visibleReviews,
+    feedReviews,
+    listeningHistory,
+    listeningStreak,
+    recentListening,
+    friendActivity,
+    interestingUsers,
+    interestingAlbums,
     lists,
     top5,
     globalChats,
@@ -1565,6 +2713,7 @@ export default function useBSideApp() {
     isStoryVisible,
     editingReview,
     reviewAlbum,
+    reviewContext,
     isCreatingReview,
     shareReview,
     hasUnreadMessages,
@@ -1605,6 +2754,7 @@ export default function useBSideApp() {
     addReviewComment,
     deleteReview,
     openCreateReview,
+    openReviewWhileListening,
     openEditReview,
     closeReviewModal,
     publishReview,
