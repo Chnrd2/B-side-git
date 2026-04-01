@@ -24,7 +24,13 @@ import {
   shouldUploadProfileAsset,
   uploadProfileAsset,
 } from '../lib/profileAssets';
-import { resolveAlbumPlayback } from '../lib/musicCatalog';
+import { fetchAlbumTracks, resolveAlbumPlayback } from '../lib/musicCatalog';
+import {
+  triggerErrorFeedback,
+  triggerSelectionFeedback,
+  triggerSuccessFeedback,
+  triggerWarningFeedback,
+} from '../lib/feedback';
 import {
   cancelStreakWarning,
   getPushSupportStatus,
@@ -87,6 +93,7 @@ import {
   toggleReviewLikeRecord,
   subscribeToUserMessages,
   subscribeToUserNotifications,
+  upsertPushDeviceToken,
 } from '../lib/supabase';
 
 const initialState = createInitialState();
@@ -458,6 +465,7 @@ export default function useBSideApp() {
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const playbackResolutionCacheRef = useRef(new Map());
+  const oracleHistoryRef = useRef([]);
   const [listModalAlbum, setListModalAlbum] = useState(null);
   const [isCreateListVisible, setIsCreateListVisible] = useState(false);
   const [isShareVisible, setIsShareVisible] = useState(false);
@@ -874,6 +882,134 @@ export default function useBSideApp() {
       );
     });
 
+    friendActivity.forEach((activity) => {
+      addCandidate(
+        {
+          id: activity.albumId || activity.id,
+          albumId: activity.albumId,
+          title: activity.albumTitle,
+          artist: activity.artist,
+          cover: activity.cover,
+          previewUrl: activity.previewUrl,
+          artistId: activity.artistId,
+          artistUrl: activity.artistUrl,
+          source: activity.source,
+        },
+        {
+          score:
+            activity.rating * 7 +
+            activity.likedBy.length * 2 +
+            activity.comments.length * 3 +
+            18,
+          reason: `${normalizeHandle(activity.user)} lo está moviendo ahora`,
+        }
+      );
+    });
+
+    recentListening.slice(0, 6).forEach((entry) => {
+      const entryArtistKey = createArtistKey(entry.artist);
+
+      feedReviews
+        .filter(
+          (review) =>
+            createArtistKey(review.artist) === entryArtistKey &&
+            createAlbumKey(review.albumTitle, review.artist) !==
+              createAlbumKey(entry.title, entry.artist) &&
+            normalizeHandle(review.user) !== currentUserHandle
+        )
+        .slice(0, 2)
+        .forEach((review) => {
+          addCandidate(
+            {
+              id: review.albumId || review.id,
+              albumId: review.albumId,
+              title: review.albumTitle,
+              artist: review.artist,
+              cover: review.cover,
+              previewUrl: review.previewUrl,
+              artistId: review.artistId,
+              artistUrl: review.artistUrl,
+              source: review.source,
+            },
+            {
+              score: 14 + review.rating * 4,
+              reason: `Se cruza con tus escuchas recientes de ${entry.artist}`,
+            }
+          );
+        });
+    });
+
+    wishlist.slice(0, 6).forEach((entry) => {
+      const entryArtistKey = createArtistKey(entry.artist);
+
+      feedReviews
+        .filter(
+          (review) =>
+            createArtistKey(review.artist) === entryArtistKey &&
+            createAlbumKey(review.albumTitle, review.artist) !==
+              createAlbumKey(entry.title, entry.artist) &&
+            normalizeHandle(review.user) !== currentUserHandle
+        )
+        .slice(0, 2)
+        .forEach((review) => {
+          addCandidate(
+            {
+              id: review.albumId || review.id,
+              albumId: review.albumId,
+              title: review.albumTitle,
+              artist: review.artist,
+              cover: review.cover,
+              previewUrl: review.previewUrl,
+              artistId: review.artistId,
+              artistUrl: review.artistUrl,
+              source: review.source,
+            },
+            {
+              score: 12 + review.rating * 3,
+              reason: 'Dialoga con tu lista Por escuchar',
+            }
+          );
+        });
+    });
+
+    lists
+      .filter((list) => !list.isSystem)
+      .slice(0, 4)
+      .forEach((list) => {
+        list.items.slice(0, 4).forEach((item) => {
+          const itemArtistKey = createArtistKey(item.artist);
+
+          feedReviews
+            .filter(
+              (review) =>
+                createArtistKey(review.artist) === itemArtistKey &&
+                createAlbumKey(review.albumTitle, review.artist) !==
+                  createAlbumKey(item.title, item.artist) &&
+                normalizeHandle(review.user) !== currentUserHandle
+            )
+            .slice(0, 1)
+            .forEach((review) => {
+              addCandidate(
+                {
+                  id: review.albumId || review.id,
+                  albumId: review.albumId,
+                  title: review.albumTitle,
+                  artist: review.artist,
+                  cover: review.cover,
+                  previewUrl: review.previewUrl,
+                  artistId: review.artistId,
+                  artistUrl: review.artistUrl,
+                  source: review.source,
+                },
+                {
+                  score: 12 + review.rating * 3,
+                  reason: `Podría encajar en tu lista "${list.name}"`,
+                }
+              );
+            });
+        });
+      });
+
     Object.entries(MOCK_USERS).forEach(([handle, user]) => {
       const normalizedHandle = normalizeHandle(handle);
 
@@ -901,9 +1037,13 @@ export default function useBSideApp() {
   }, [
     currentUserHandle,
     feedReviews,
+    friendActivity,
     followingSet,
+    lists,
     ownTasteAlbumKeys,
     ownTasteArtistKeys,
+    recentListening,
+    wishlist,
   ]);
   const interestingArtists = useMemo(() => {
     const artistMap = new Map();
@@ -1280,16 +1420,51 @@ export default function useBSideApp() {
       return;
     }
 
+    let isMounted = true;
+
     registerForPushNotifications()
       .then((result) => {
+        if (!isMounted) {
+          return;
+        }
+
         setPushPermissionStatus(
           result.ok ? result.permission || 'granted' : result.permission || 'denied'
         );
+
+        if (
+          result.ok &&
+          result.token &&
+          authSession?.user?.id &&
+          supabaseStatus.isConfigured
+        ) {
+          void upsertPushDeviceToken({
+            userId: authSession.user.id,
+            token: result.token,
+            platform: result.platform || Platform.OS,
+            projectId: result.projectId || '',
+          }).then((response) => {
+            if (!response.ok && response.message) {
+              setAuthMessage((prevMessage) => prevMessage || response.message);
+            }
+          });
+        }
       })
       .catch(() => {
-        setPushPermissionStatus('error');
+        if (isMounted) {
+          setPushPermissionStatus('error');
+        }
       });
-  }, [hasHydrated, preferences.notificationsEnabled]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    authSession?.user?.id,
+    hasHydrated,
+    preferences.notificationsEnabled,
+    supabaseStatus.isConfigured,
+  ]);
 
   useEffect(() => {
     if (!hasHydrated || !preferences.streakAlertsEnabled) {
@@ -1631,21 +1806,33 @@ export default function useBSideApp() {
   const runMusicOracle = async (focus = '') => {
     setIsOracleBusy(true);
     setOracleMessage('');
+    void triggerSelectionFeedback();
 
     try {
+      const normalizedFocus = `${focus || ''}`.trim().toLowerCase();
+      const focusPool = normalizedFocus
+        ? oracleCandidates.filter((candidate) =>
+            [candidate.title, candidate.artist, candidate.reason]
+              .filter(Boolean)
+              .some((value) =>
+                `${value}`.trim().toLowerCase().includes(normalizedFocus)
+              )
+          )
+        : oracleCandidates;
       const result = await getMusicOracleRecommendations({
         focus,
         tasteProfile: oracleTasteProfile,
         candidates: oracleCandidates,
       });
 
-      const currentOracleIds = new Set(
-        oracleRecommendations.map((recommendation) => recommendation.id)
-      );
+      const currentOracleIds = new Set([
+        ...oracleRecommendations.map((recommendation) => recommendation.id),
+        ...oracleHistoryRef.current,
+      ]);
       let nextRecommendations =
         (result.recommendations || []).length > 0
           ? result.recommendations
-          : shuffleCollection(oracleCandidates)
+          : shuffleCollection(focusPool.length >= 3 ? focusPool : oracleCandidates)
               .slice(0, 3)
               .map((candidate) => ({
               ...candidate,
@@ -1664,7 +1851,8 @@ export default function useBSideApp() {
         nextIds.every((recommendationId) => currentOracleIds.has(recommendationId));
 
       if (repeatedSelection && oracleCandidates.length > nextRecommendations.length) {
-        const freshPool = shuffleCollection(oracleCandidates).filter(
+        const basePool = focusPool.length >= 3 ? focusPool : oracleCandidates;
+        const freshPool = shuffleCollection(basePool).filter(
           (candidate) => !currentOracleIds.has(candidate.id)
         );
 
@@ -1681,10 +1869,19 @@ export default function useBSideApp() {
         }
       }
 
+      if (!nextRecommendations.length && oracleCandidates.length) {
+        nextRecommendations = shuffleCollection(oracleCandidates).slice(0, 3);
+        nextSource = 'fallback';
+      }
+
       setOracleRecommendations(nextRecommendations);
       setOracleSource(nextSource);
+      oracleHistoryRef.current = nextRecommendations.map(
+        (recommendation) => recommendation.id
+      );
 
       if (!nextRecommendations.length) {
+        void triggerWarningFeedback();
         Alert.alert(
           'El Oráculo todavía no tiene material',
           'Necesitamos un poco más de actividad o más discos sugeridos para devolverte algo fuerte.'
@@ -1709,6 +1906,8 @@ export default function useBSideApp() {
         read: true,
       });
 
+      void triggerSuccessFeedback();
+
       setOracleMessage(
         nextSource === 'remote'
           ? 'Tanda afinada con B-Side Lab.'
@@ -1722,6 +1921,7 @@ export default function useBSideApp() {
       return true;
     } catch (error) {
       console.error('No pudimos actualizar el Oráculo:', error);
+      void triggerErrorFeedback();
       setOracleMessage(
         'No pudimos refrescar la tanda ahora mismo. Probá otra vez en un rato.'
       );
@@ -1806,6 +2006,7 @@ export default function useBSideApp() {
       : lists.find((candidateList) => candidateList.id === listId);
 
     if (!list) {
+      void triggerWarningFeedback();
       Alert.alert(
         'Todavía no cargamos esa lista',
         'Esperá un segundo y volvé a intentar la exportación.'
@@ -1814,19 +2015,24 @@ export default function useBSideApp() {
     }
 
     if (!spotifySession?.accessToken) {
+      void triggerSelectionFeedback();
       const connected = await connectSpotifyAccount({ pendingListId: listId });
       return connected;
     }
 
     setIsSpotifyExportBusy(true);
+    void triggerSelectionFeedback();
 
     try {
       const result = await exportListToSpotifyPlaylist(list);
 
       if (!result.ok) {
+        void triggerErrorFeedback();
         Alert.alert('No pudimos exportar la lista', result.message);
         return false;
       }
+
+      void triggerSuccessFeedback();
 
       pushNotification({
         type: 'product',
@@ -2362,6 +2568,68 @@ export default function useBSideApp() {
       }
     });
 
+    lists
+      .filter((list) => !list.isSystem)
+      .forEach((list) => {
+        const touchesArtist = list.items.some(
+          (album) => createArtistKey(album.artist) === normalizedArtist
+        );
+
+        if (!touchesArtist) {
+          return;
+        }
+
+        list.items.forEach((album) => {
+          const otherArtistKey = createArtistKey(album.artist);
+
+          if (!otherArtistKey || otherArtistKey === normalizedArtist) {
+            return;
+          }
+
+          const existingRelatedArtist = relatedArtistMap.get(otherArtistKey) || {
+            name: album.artist,
+            cover: album.cover || '',
+            artistId: album.artistId || '',
+            artistUrl: album.artistUrl || '',
+            source: album.source || '',
+            anchorAlbumTitle: album.title || '',
+            score: 0,
+          };
+
+          existingRelatedArtist.score += 4;
+          existingRelatedArtist.cover = existingRelatedArtist.cover || album.cover || '';
+          existingRelatedArtist.anchorAlbumTitle =
+            existingRelatedArtist.anchorAlbumTitle || album.title || '';
+          relatedArtistMap.set(otherArtistKey, existingRelatedArtist);
+        });
+      });
+
+    if (wishlist.some((album) => createArtistKey(album.artist) === normalizedArtist)) {
+      recentListening.slice(0, 8).forEach((entry) => {
+        const otherArtistKey = createArtistKey(entry.artist);
+
+        if (!otherArtistKey || otherArtistKey === normalizedArtist) {
+          return;
+        }
+
+        const existingRelatedArtist = relatedArtistMap.get(otherArtistKey) || {
+          name: entry.artist,
+          cover: entry.cover || '',
+          artistId: entry.artistId || '',
+          artistUrl: entry.artistUrl || '',
+          source: entry.source || '',
+          anchorAlbumTitle: entry.title || '',
+          score: 0,
+        };
+
+        existingRelatedArtist.score += 3;
+        existingRelatedArtist.cover = existingRelatedArtist.cover || entry.cover || '';
+        existingRelatedArtist.anchorAlbumTitle =
+          existingRelatedArtist.anchorAlbumTitle || entry.title || '';
+        relatedArtistMap.set(otherArtistKey, existingRelatedArtist);
+      });
+    }
+
     return {
       fans: Array.from(fanMap.values()).slice(0, 4),
       reviews: reviewsForArtist,
@@ -2506,16 +2774,36 @@ export default function useBSideApp() {
     }
 
     const resolution = await resolveAlbumPlayback(track);
+    let playableTrack =
+      resolution?.ok && resolution.track?.previewUrl
+        ? mergePlayableTrackData(track, resolution.track)
+        : null;
 
-    if (!resolution?.ok || !resolution.track?.previewUrl) {
+    if (!playableTrack) {
+      try {
+        const albumTracks = await fetchAlbumTracks(track);
+        const firstPlayableTrack =
+          albumTracks.find((candidate) => candidate.previewUrl) ||
+          albumTracks.find((candidate) => candidate.externalUrl) ||
+          null;
+
+        if (firstPlayableTrack) {
+          playableTrack = mergePlayableTrackData(track, firstPlayableTrack);
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          throw error;
+        }
+      }
+    }
+
+    if (!playableTrack) {
       if (cacheKey) {
         playbackResolutionCacheRef.current.set(cacheKey, null);
       }
 
       return null;
     }
-
-    const playableTrack = mergePlayableTrackData(track, resolution.track);
 
     if (cacheKey) {
       playbackResolutionCacheRef.current.set(cacheKey, playableTrack);
@@ -2537,9 +2825,11 @@ export default function useBSideApp() {
       const hasExternalUrl = `${fallbackTrack?.externalUrl || ''}`.trim().length > 0;
 
       if (hasExternalUrl) {
+        void triggerSelectionFeedback();
         const didOpenExternal = await openExternalPlaybackLink(fallbackTrack);
 
         if (!didOpenExternal) {
+          void triggerErrorFeedback();
           Alert.alert(
             'No pudimos abrir el release',
             'B-Side encontro un enlace externo, pero no logramos abrirlo desde este dispositivo.'
@@ -2549,6 +2839,7 @@ export default function useBSideApp() {
         return false;
       }
 
+      void triggerWarningFeedback();
       Alert.alert(
         'Sin audio disponible',
         'Este release aparece en el catálogo, pero no trajo preview ni una salida externa confiable. Igual podés guardarlo, reseñarlo o seguir al artista.'
@@ -2572,6 +2863,7 @@ export default function useBSideApp() {
     );
 
     setCurrentTrack(playableTrack);
+    void triggerSelectionFeedback();
     if (!shouldStoreListeningEvent) {
       return true;
     }
@@ -2732,6 +3024,8 @@ export default function useBSideApp() {
         };
       })
     );
+
+    void triggerSelectionFeedback();
 
     pushNotification({
       type: 'social',
@@ -3260,6 +3554,7 @@ export default function useBSideApp() {
       }
 
       if (prevTop5.length >= 5) {
+        void triggerWarningFeedback();
         Alert.alert(
           'Limite',
           'Maximo 5 discos. Desfija uno para agregar este.'
@@ -3272,6 +3567,7 @@ export default function useBSideApp() {
     });
 
     if (nextTop5) {
+      void triggerSuccessFeedback();
       pushNotification({
         type: 'product',
         title: 'Top 5 actualizado',
@@ -3338,6 +3634,7 @@ export default function useBSideApp() {
     );
 
     if (likeState?.added) {
+      void triggerSuccessFeedback();
       pushNotification({
         type: 'social',
         title: 'Like guardado',
@@ -3413,6 +3710,7 @@ export default function useBSideApp() {
     );
 
     if (commentState) {
+      void triggerSuccessFeedback();
       pushNotification({
         type: 'social',
         title: 'Comentario enviado',
@@ -3996,6 +4294,8 @@ export default function useBSideApp() {
       return;
     }
 
+    void triggerSelectionFeedback();
+
     if (supabaseStatus.isConfigured && authSession?.user?.id && targetChatRef.user?.handle) {
       void createMessageRecord({
         senderId: authSession.user.id,
@@ -4106,6 +4406,8 @@ export default function useBSideApp() {
       previewUrl: recommendedAlbum.previewUrl || '',
       ctaLabel: 'Abrir álbum',
     });
+
+    void triggerSuccessFeedback();
 
     pushNotification({
       type: 'social',

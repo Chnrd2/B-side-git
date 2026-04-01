@@ -1,8 +1,10 @@
 import React from 'react';
 import {
+  Alert,
   Dimensions,
   Image,
   Modal,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -63,6 +65,53 @@ const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
   while (topFive.length < 5) {
     topFive.push(null);
   }
+
+  const shareSummary = [
+    'Mi lado B en B-Side',
+    `@${`${username || user?.handle || ''}`.replace('@', '')}`,
+    ...topFive
+      .filter(Boolean)
+      .map(
+        (album, index) =>
+          `#${index + 1} ${album.title} · ${album.artist || 'Artista por confirmar'}`
+      ),
+  ].join('\n');
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: 'Mi Top 5 en B-Side',
+        message: shareSummary,
+      });
+    } catch (error) {
+      console.warn('No pudimos compartir la story del Top 5:', error);
+    }
+  };
+
+  const handleCopySummary = async () => {
+    try {
+      if (globalThis?.navigator?.clipboard?.writeText) {
+        await globalThis.navigator.clipboard.writeText(shareSummary);
+        Alert.alert('Copiado', 'Tu resumen del Top 5 quedó copiado.');
+        return;
+      }
+    } catch (error) {
+      // fallback below
+    }
+
+    Alert.alert(
+      'Copiar resumen',
+      'En este dispositivo no pudimos copiarlo directo. Podés compartirlo desde el botón central.'
+    );
+  };
+
+  const handleInstagramShare = async () => {
+    Alert.alert(
+      'Compartir en Instagram',
+      'De momento abrimos el share nativo para que lo mandes a Stories o a la app que prefieras.'
+    );
+    await handleShare();
+  };
 
   return (
     <Modal animationType="fade" transparent={true} visible={visible}>
@@ -136,17 +185,17 @@ const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
         </LinearGradient>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => void handleCopySummary()}>
             <Copy color="white" size={22} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.iconBtn, styles.instaBtn]}
-            onPress={() => alert('Abriendo Instagram!')}>
+            onPress={() => void handleInstagramShare()}>
             <Instagram color="white" size={28} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => void handleShare()}>
             <Share2 color="white" size={22} />
           </TouchableOpacity>
         </View>

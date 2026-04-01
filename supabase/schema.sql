@@ -149,6 +149,18 @@ create table if not exists public.notifications (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.push_devices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  expo_push_token text not null unique,
+  platform text not null default 'android',
+  project_id text,
+  is_active boolean not null default true,
+  last_seen_at timestamptz not null default timezone('utc', now()),
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists reviews_user_id_idx on public.reviews (user_id);
 create index if not exists review_comments_review_id_idx on public.review_comments (review_id);
 create index if not exists lists_user_id_idx on public.lists (user_id);
@@ -157,6 +169,7 @@ create index if not exists messages_receiver_read_idx on public.messages (receiv
 create index if not exists reports_status_idx on public.reports (status, created_at desc);
 create index if not exists listening_events_user_id_idx on public.listening_events (user_id, created_at desc);
 create index if not exists notifications_recipient_id_idx on public.notifications (recipient_id, created_at desc);
+create index if not exists push_devices_user_id_idx on public.push_devices (user_id, is_active, last_seen_at desc);
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -217,6 +230,7 @@ alter table public.reports enable row level security;
 alter table public.subscriptions enable row level security;
 alter table public.listening_events enable row level security;
 alter table public.notifications enable row level security;
+alter table public.push_devices enable row level security;
 
 drop policy if exists "Profiles are readable" on public.profiles;
 create policy "Profiles are readable"
@@ -413,6 +427,19 @@ with check (
   auth.uid() = actor_id
   and recipient_id <> auth.uid()
 );
+
+drop policy if exists "Users read own push devices" on public.push_devices;
+create policy "Users read own push devices"
+on public.push_devices
+for select
+using (auth.uid() = user_id);
+
+drop policy if exists "Users manage own push devices" on public.push_devices;
+create policy "Users manage own push devices"
+on public.push_devices
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values

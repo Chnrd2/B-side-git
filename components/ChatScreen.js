@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -21,6 +22,7 @@ import {
   Video,
   X,
 } from 'lucide-react-native';
+import { triggerSelectionFeedback } from '../lib/feedback';
 
 const rgbaFromHex = (hex, alpha = 1) => {
   const safeHex = `${hex || '#000000'}`.replace('#', '');
@@ -104,6 +106,7 @@ const ChatScreen = ({
   };
 
   const selectBackground = (color) => {
+    void triggerSelectionFeedback();
     setChatBgColor(color);
     onUpdateTheme?.(chat?.id, color);
     setIsBgMenuVisible(false);
@@ -115,6 +118,16 @@ const ChatScreen = ({
     if (normalizedHandle !== '@') {
       onOpenProfile?.(normalizedHandle);
     }
+  };
+
+  const handleHeaderPlaceholder = (mode) => {
+    void triggerSelectionFeedback();
+    Alert.alert(
+      mode === 'call' ? 'Llamadas en preparación' : 'Video en preparación',
+      mode === 'call'
+        ? 'La base del chat ya está lista. El siguiente paso es sumar llamadas con audio real.'
+        : 'La interfaz ya contempla video, pero falta integrar el flujo real de videollamada.'
+    );
   };
 
   const renderMessage = ({ item }) => {
@@ -235,15 +248,25 @@ const ChatScreen = ({
         </View>
 
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => handleHeaderPlaceholder('call')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Phone color="white" size={20} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => handleHeaderPlaceholder('video')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Video color="white" size={20} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={() => setIsBgMenuVisible(true)}>
+            onPress={() => {
+              void triggerSelectionFeedback();
+              setIsBgMenuVisible(true);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Settings color="#A855F7" size={22} />
           </TouchableOpacity>
         </View>

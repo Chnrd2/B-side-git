@@ -5,6 +5,7 @@ import {
   Image,
   Modal,
   Platform,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { Slider } from '@miblanchard/react-native-slider';
+import { triggerSelectionFeedback } from '../lib/feedback';
 
 const Visualizer = ({ isPlaying }) => {
   const anim1 = useRef(new Animated.Value(0.2)).current;
@@ -88,6 +90,23 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
   const soundRef = useRef(null);
   const isDesktopWeb = Platform.OS === 'web';
 
+  const shareCurrentTrack = useCallback(async () => {
+    if (!currentTrack) {
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: `${currentTrack.title} · ${currentTrack.artist}`,
+        message: `${currentTrack.title} · ${currentTrack.artist}${
+          currentTrack.externalUrl ? `\n${currentTrack.externalUrl}` : ''
+        }`,
+      });
+    } catch (error) {
+      console.warn('No pudimos compartir el track actual:', error);
+    }
+  }, [currentTrack]);
+
   const onPlaybackStatusUpdate = (status) => {
     if (!status.isLoaded) {
       return;
@@ -148,6 +167,27 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
     await soundRef.current.setPositionAsync(value);
   };
 
+  const handleJump = async (deltaMs) => {
+    if (!soundRef.current || !duration) {
+      return;
+    }
+
+    const nextPosition = Math.max(0, Math.min(duration, position + deltaMs));
+    await handleSeek(nextPosition);
+  };
+
+  const handleRestart = async () => {
+    if (!soundRef.current) {
+      return;
+    }
+
+    await handleSeek(0);
+
+    if (!isPlaying) {
+      await soundRef.current.playAsync();
+    }
+  };
+
   const closePlayer = useCallback(async () => {
     if (soundRef.current) {
       await soundRef.current.unloadAsync();
@@ -195,7 +235,10 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
       {!isExpanded ? (
         <TouchableOpacity
           style={styles.miniContainer}
-          onPress={() => setIsExpanded(true)}
+          onPress={() => {
+            void triggerSelectionFeedback();
+            setIsExpanded(true);
+          }}
           activeOpacity={0.92}>
           <Image source={{ uri: currentTrack.cover }} style={styles.miniCover} />
 
@@ -211,6 +254,7 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
           <TouchableOpacity
             onPress={(event) => {
               event?.stopPropagation?.();
+              void triggerSelectionFeedback();
               void togglePlayPause();
             }}
             style={styles.miniIconBtn}>
@@ -226,6 +270,7 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
           <TouchableOpacity
             onPress={(event) => {
               event?.stopPropagation?.();
+              void triggerSelectionFeedback();
               void closePlayer();
             }}
             style={styles.miniIconBtn}>
@@ -237,11 +282,15 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
       <Modal visible={isExpanded} animationType="slide" transparent={false}>
         <View style={styles.fullContainer}>
           <View style={styles.fullHeader}>
-            <TouchableOpacity onPress={() => setIsExpanded(false)}>
+            <TouchableOpacity
+              onPress={() => {
+                void triggerSelectionFeedback();
+                setIsExpanded(false);
+              }}>
               <ChevronDown color="white" size={30} />
             </TouchableOpacity>
             <Text style={styles.fullHeaderText}>Reproduciendo</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => void shareCurrentTrack()}>
               <Share2 color="white" size={22} />
             </TouchableOpacity>
           </View>
@@ -262,6 +311,7 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
             <TouchableOpacity
               style={styles.reviewCta}
               onPress={() => {
+                void triggerSelectionFeedback();
                 onOpenReview?.();
                 setIsExpanded(false);
               }}>
@@ -287,10 +337,10 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
             </View>
 
             <View style={styles.controlsRow}>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => void handleRestart()}>
                 <Repeat color="#555" size={24} />
               </TouchableOpacity>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => void handleJump(-10000)}>
                 <SkipBack color="white" fill="white" size={32} />
               </TouchableOpacity>
               <TouchableOpacity onPress={togglePlayPause} style={styles.bigPlayBtn}>
@@ -300,7 +350,7 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
                   <Play color="black" fill="black" size={35} />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => void handleJump(10000)}>
                 <SkipForward color="white" fill="white" size={32} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => void closePlayer()}>

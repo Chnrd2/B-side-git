@@ -20,14 +20,24 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050816"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "bside-social",
+          "color": "#8A2BE2"
+        }
+      ]
     ],
-    "description": "Red social musical para descubrir discos, resenarlos y guardarlos en listas."
+    "description": "Red social musical para descubrir discos, reseñarlos y guardarlos en listas."
   }
 }

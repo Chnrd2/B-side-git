@@ -20,6 +20,7 @@ import {
   Search as SearchIcon,
   Sparkles,
 } from 'lucide-react-native';
+import { triggerSelectionFeedback } from '../lib/feedback';
 
 import {
   getPlaybackState,
@@ -258,6 +259,15 @@ const SearchScreen = ({
     };
   }, [trimmedQuery]);
 
+  const handleRunOracle = async () => {
+    void triggerSelectionFeedback();
+    const didRefresh = await onRunOracle?.(trimmedQuery);
+
+    if (didRefresh && isSearching) {
+      setQuery('');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.headerTitle}>Buscar</Text>
@@ -343,7 +353,7 @@ const SearchScreen = ({
               <TouchableOpacity
                 style={[styles.oracleButton, isOracleBusy && styles.oracleButtonDisabled]}
                 disabled={isOracleBusy}
-                onPress={() => onRunOracle?.(trimmedQuery)}>
+                onPress={() => void handleRunOracle()}>
                 {isOracleBusy ? (
                   <ActivityIndicator color="white" />
                 ) : (
