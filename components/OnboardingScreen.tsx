@@ -26,8 +26,8 @@ const OnboardingScreen = ({ onContinue }) => {
           Descubrí, guardá y compartí música a tu manera
         </Text>
         <Text style={styles.subtitle}>
-          Encontrá discos, armá tus listas, dejá reseñas y conectá con gente
-          que vibra con la música como vos.
+          Encontrá discos, armá tus listas, dejá reseñas y conectá con gente que
+          vibra con la música como vos.
         </Text>
       </View>
 
@@ -53,8 +53,8 @@ const OnboardingScreen = ({ onContinue }) => {
         <View style={styles.pointRow}>
           <Shield color="#A855F7" size={18} />
           <Text style={styles.pointText}>
-            Personalizá tu perfil, compartí reseñas y descubrí artistas desde
-            una comunidad hecha para melómanos.
+            Personalizá tu perfil, compartí reseñas y descubrí artistas desde una
+            comunidad hecha para melómanos.
           </Text>
         </View>
       </View>

@@ -402,6 +402,15 @@ const FeedScreen = ({
           />
         </>
       }
+      ListEmptyComponent={
+        <View style={styles.emptyFeedCard}>
+          <Text style={styles.emptyFeedTitle}>Todavía no hay reseñas en tu feed</Text>
+          <Text style={styles.emptyFeedText}>
+            Empezá a seguir perfiles, dejá tus primeras reseñas o usá el atajo de
+            “Mientras suena” para darle movimiento a la comunidad.
+          </Text>
+        </View>
+      }
       renderItem={({ item }) => (
         <FeedItem
           review={item}
@@ -562,6 +571,24 @@ const styles = StyleSheet.create({
   },
   horizontalRow: {
     paddingRight: 8,
+  },
+  emptyFeedCard: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(7, 10, 18, 0.68)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: 18,
+    gap: 8,
+    marginBottom: 18,
+  },
+  emptyFeedTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  emptyFeedText: {
+    color: '#9CA3AF',
+    lineHeight: 21,
   },
   friendCard: {
     width: 228,

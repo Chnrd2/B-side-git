@@ -2,11 +2,13 @@ import 'react-native-gesture-handler';
 
 import React from 'react';
 import {
+  ActivityIndicator,
   Animated,
   LogBox,
   SafeAreaView,
   StatusBar,
   StyleSheet,
+  Text,
   View,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -32,11 +34,14 @@ export default function App() {
   if (app.isLoading) {
     return (
       <View style={styles.splashContainer}>
-        <Animated.Image
-          source={{ uri: 'https://i.postimg.cc/85M3p6Xn/vinilo-violeta.png' }}
-          style={[styles.splashLogo, { opacity: app.fadeAnim }]}
-          resizeMode="contain"
-        />
+        <Animated.View style={[styles.splashBadge, { opacity: app.fadeAnim }]}>
+          <Text style={styles.splashBadgeText}>B-SIDE</Text>
+        </Animated.View>
+        <Text style={styles.splashTitle}>Preparando tu lado B</Text>
+        <Text style={styles.splashSubtitle}>
+          Cargando perfil, listas, actividad y tu última sesión.
+        </Text>
+        <ActivityIndicator color="#A855F7" size="large" style={styles.splashSpinner} />
       </View>
     );
   }
@@ -144,6 +149,38 @@ const styles = StyleSheet.create({
     backgroundColor: '#050816',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 28,
   },
-  splashLogo: { width: 180, height: 180 },
+  splashBadge: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(138, 43, 226, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.36)',
+  },
+  splashBadgeText: {
+    color: '#F3E8FF',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
+  splashTitle: {
+    marginTop: 28,
+    color: 'white',
+    fontSize: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  splashSubtitle: {
+    marginTop: 10,
+    color: '#9CA3AF',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  splashSpinner: {
+    marginTop: 24,
+  },
 });

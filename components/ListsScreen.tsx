@@ -43,53 +43,67 @@ const ListsScreen = ({ lists, wishlist, onOpenList, onOpenWishlist, onCreateList
         </TouchableOpacity>
       ) : null}
 
-      <FlatList
-        data={lists}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.gridContent}
-        columnWrapperStyle={styles.columnWrapper}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.listCard,
-              {
-                backgroundColor: `${item.color}15`,
-                borderColor: `${item.color}30`,
-              },
-            ]}
-            activeOpacity={0.9}
-            onPress={() => onOpenList(item)}>
-            <View style={styles.cardTop}>
-              <View style={[styles.colorBadge, { backgroundColor: item.color }]} />
-              <View
-                style={[
-                  styles.visibilityBadge,
-                  item.isPublic
-                    ? styles.visibilityBadgePublic
-                    : styles.visibilityBadgePrivate,
-                ]}>
-                {item.isPublic ? (
-                  <Globe2 color="#86EFAC" size={12} />
-                ) : (
-                  <Lock color="#FDE68A" size={12} />
-                )}
-                <Text style={styles.visibilityText}>
-                  {item.isPublic ? 'Pública' : 'Privada'}
+      {lists.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Todavía no armaste listas propias</Text>
+          <Text style={styles.emptyText}>
+            Arrancá con una lista simple para guardar discos por mood, momento o
+            descubrimiento. Después la podés volver pública o privada.
+          </Text>
+          <TouchableOpacity style={styles.emptyButton} onPress={onCreateList}>
+            <Plus color="white" size={18} />
+            <Text style={styles.emptyButtonText}>Crear mi primera lista</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={lists}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.gridContent}
+          columnWrapperStyle={styles.columnWrapper}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[
+                styles.listCard,
+                {
+                  backgroundColor: `${item.color}15`,
+                  borderColor: `${item.color}30`,
+                },
+              ]}
+              activeOpacity={0.9}
+              onPress={() => onOpenList(item)}>
+              <View style={styles.cardTop}>
+                <View style={[styles.colorBadge, { backgroundColor: item.color }]} />
+                <View
+                  style={[
+                    styles.visibilityBadge,
+                    item.isPublic
+                      ? styles.visibilityBadgePublic
+                      : styles.visibilityBadgePrivate,
+                  ]}>
+                  {item.isPublic ? (
+                    <Globe2 color="#86EFAC" size={12} />
+                  ) : (
+                    <Lock color="#FDE68A" size={12} />
+                  )}
+                  <Text style={styles.visibilityText}>
+                    {item.isPublic ? 'Pública' : 'Privada'}
+                  </Text>
+                </View>
+              </View>
+
+              <View>
+                <Text style={styles.listName}>{item.name}</Text>
+                <Text style={styles.listCount}>
+                  {item.items.length} {item.items.length === 1 ? 'item' : 'items'}
                 </Text>
               </View>
-            </View>
-
-            <View>
-              <Text style={styles.listName}>{item.name}</Text>
-              <Text style={styles.listCount}>
-                {item.items.length} {item.items.length === 1 ? 'item' : 'items'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </View>
   );
 };
@@ -161,6 +175,39 @@ const styles = StyleSheet.create({
   },
   gridContent: {
     paddingBottom: 140,
+  },
+  emptyCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
+    backgroundColor: 'rgba(10,10,10,0.88)',
+    padding: 18,
+    gap: 10,
+  },
+  emptyTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  emptyText: {
+    color: '#9CA3AF',
+    lineHeight: 21,
+  },
+  emptyButton: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#8A2BE2',
+  },
+  emptyButtonText: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 13,
   },
   columnWrapper: {
     gap: 12,

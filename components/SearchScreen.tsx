@@ -393,7 +393,13 @@ const SearchScreen = ({
         </View>
 
         {loading ? (
-          <ActivityIndicator color="#A855F7" style={styles.loader} />
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color="#A855F7" />
+            <Text style={styles.loadingTitle}>Buscando música</Text>
+            <Text style={styles.loadingText}>
+              Estamos cruzando tu búsqueda con el catálogo disponible.
+            </Text>
+          </View>
         ) : showDiscovery ? (
           <>
             {interestingAlbums.length ? (
@@ -450,6 +456,18 @@ const SearchScreen = ({
                     />
                   ))}
                 </ScrollView>
+              </View>
+            ) : null}
+
+            {!interestingAlbums.length && !interestingArtists.length ? (
+              <View style={styles.discoveryEmptyCard}>
+                <Text style={styles.discoveryEmptyTitle}>
+                  El radar todavía se está armando
+                </Text>
+                <Text style={styles.discoveryEmptyText}>
+                  Sumá más reseñas, listas o escuchas para que B-Side empiece a
+                  devolverte una tanda más afinada.
+                </Text>
               </View>
             ) : null}
 
@@ -752,6 +770,26 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     marginTop: 10,
   },
+  loadingCard: {
+    marginBottom: 20,
+    borderRadius: 22,
+    padding: 18,
+    alignItems: 'center',
+    backgroundColor: 'rgba(11, 10, 20, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.18)',
+    gap: 10,
+  },
+  loadingTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  loadingText: {
+    color: '#9CA3AF',
+    textAlign: 'center',
+    lineHeight: 19,
+  },
   discoverySection: {
     marginBottom: 22,
   },
@@ -775,6 +813,24 @@ const styles = StyleSheet.create({
   },
   discoveryRow: {
     paddingRight: 8,
+  },
+  discoveryEmptyCard: {
+    marginBottom: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(10, 10, 10, 0.9)',
+    padding: 18,
+    gap: 8,
+  },
+  discoveryEmptyTitle: {
+    color: 'white',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  discoveryEmptyText: {
+    color: '#9CA3AF',
+    lineHeight: 20,
   },
   discoveryCard: {
     borderRadius: 22,

@@ -49,7 +49,7 @@ const NotificationsCenterScreen = ({
             <Bell color="#E9D5FF" size={22} />
             <Text style={styles.emptyTitle}>Todo tranquilo por ahora</Text>
             <Text style={styles.emptyText}>
-              Cuando haya actividad, seguridad o cambios de plan, aparece aca.
+              Cuando haya actividad, seguridad o cambios de plan, aparece acá.
             </Text>
           </View>
         ) : (

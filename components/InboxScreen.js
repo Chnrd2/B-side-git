@@ -39,6 +39,15 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
         data={orderedChats}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 20 }}
+        ListEmptyComponent={
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>Todavía no tenés mensajes</Text>
+            <Text style={styles.emptyText}>
+              Cuando mandes una recomendación o abras una conversación, este
+              inbox se va a llenar acá.
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => {
           const lastMessage =
             item.messages.length > 0
@@ -147,6 +156,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badgeText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+  emptyCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
+    backgroundColor: 'rgba(10,10,10,0.88)',
+    padding: 18,
+    gap: 8,
+  },
+  emptyTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  emptyText: {
+    color: '#9CA3AF',
+    lineHeight: 20,
+  },
 });
 
 export default InboxScreen;
