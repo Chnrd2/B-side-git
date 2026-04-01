@@ -9,6 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "web:19006": "expo start --web --port 19006",
+    "export:web": "expo export -p web",
+    "deploy:web": "npm run export:web && gh-pages --nojekyll -d dist",
     "doctor": "cmd /c \"if exist .expo rd /s /q .expo & npx expo-doctor\"",
     "env:init": "node scripts/init-env.cjs",
     "supabase:check": "node scripts/check-supabase-env.cjs",
@@ -41,6 +43,9 @@
     "react-native-svg": "15.12.1",
     "react-native-web": "^0.21.0",
     "typescript": "~5.9.2"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
   },
   "private": true
 }
