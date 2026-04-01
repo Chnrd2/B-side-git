@@ -18,6 +18,9 @@ const { width, height } = Dimensions.get('window');
 const StoryAlbumTile = ({ album, rank, compact = false }) => {
   const shellStyle = compact ? styles.compactTileShell : styles.largeTileShell;
   const imageStyle = compact ? styles.compactImage : styles.largeImage;
+  const placeholderAccent = compact
+    ? 'rgba(168,85,247,0.18)'
+    : 'rgba(244,114,182,0.18)';
 
   return (
     <View style={[styles.tileShell, shellStyle]}>
@@ -28,8 +31,14 @@ const StoryAlbumTile = ({ album, rank, compact = false }) => {
       {album?.cover ? (
         <Image source={{ uri: album.cover }} style={imageStyle} />
       ) : (
-        <View style={[styles.placeholderTile, imageStyle]}>
-          <Disc color="#C4B5FD" size={compact ? 20 : 24} />
+        <View
+          style={[
+            styles.placeholderTile,
+            imageStyle,
+            { backgroundColor: placeholderAccent },
+          ]}>
+          <Disc color="#E9D5FF" size={compact ? 20 : 24} />
+          <Text style={styles.placeholderRank}>#{rank}</Text>
         </View>
       )}
 
@@ -299,11 +308,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: '100%',
   },
+  placeholderRank: {
+    marginTop: 8,
+    color: '#F5F3FF',
+    fontWeight: '900',
+    fontSize: 12,
+    letterSpacing: 0.4,
+  },
   caption: {
     color: '#E5E7EB',
     textAlign: 'center',
     fontSize: 14,
     marginTop: 'auto',
+    paddingHorizontal: 16,
   },
   actionsRow: {
     flexDirection: 'row',

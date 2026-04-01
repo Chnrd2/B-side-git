@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Image,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
+  ChevronDown,
   Disc,
   Headphones,
   Radio,
@@ -28,12 +30,7 @@ import {
 
 const GENRES = ['Rock', 'Pop', 'Hip Hop', 'Electrónica', 'Jazz', 'Indie'];
 
-const DiscoveryAlbumCard = ({
-  album,
-  onSelectAlbum,
-  onPlaySong,
-  cardWidth,
-}) => {
+const DiscoveryAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
   const playbackState = getPlaybackState(album);
 
   return (
@@ -166,31 +163,23 @@ const SearchScreen = ({
   const trimmedQuery = query.trim();
   const isSearching = trimmedQuery.length >= 2;
   const showDiscovery = !isSearching;
-  const showExpandedOracle = !isSearching;
+  const showExpandedOracle = !isSearching && oracleRecommendations.length > 0;
+  const showCompactOracle = isSearching || !oracleRecommendations.length;
   const bottomSpacer = hasFloatingPlayer
     ? Platform.OS === 'android'
-      ? 260
+      ? 320
       : 280
     : Platform.OS === 'android'
-      ? 180
+      ? 220
       : 160;
   const albumCardWidth = width < 420 ? Math.min(204, width * 0.56) : 208;
   const artistCardWidth = width < 420 ? Math.min(214, width * 0.6) : 220;
   const oracleCardWidth = width < 420 ? Math.min(218, width * 0.6) : 226;
 
   const oracleStatusText = useMemo(() => {
-    if (oracleSource === 'remote') {
-      return 'Afinado con B-Side Lab';
-    }
-
-    if (oracleSource === 'fallback') {
-      return 'Tanda de rescate';
-    }
-
-    if (oracleSource === 'shuffle') {
-      return 'Otra vuelta sobre tu perfil';
-    }
-
+    if (oracleSource === 'remote') return 'Afinado con B-Side Lab';
+    if (oracleSource === 'fallback') return 'Tanda de rescate';
+    if (oracleSource === 'shuffle') return 'Otra vuelta sobre tu perfil';
     return 'Afinado con tu perfil actual';
   }, [oracleSource]);
 
@@ -290,6 +279,7 @@ const SearchScreen = ({
         style={styles.scrollArea}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: bottomSpacer },
@@ -314,7 +304,11 @@ const SearchScreen = ({
           </Text>
         </View>
 
-        <View style={[styles.oracleCard, !showExpandedOracle && styles.oracleCompactCard]}>
+        <View
+          style={[
+            styles.oracleCard,
+            showCompactOracle && styles.oracleCompactCard,
+          ]}>
           <View
             style={[
               styles.oracleHeader,
@@ -330,25 +324,38 @@ const SearchScreen = ({
               <Text style={styles.oracleText}>
                 {showExpandedOracle
                   ? 'Cruza tu Top 5, tus reseñas y tus escuchas para acercarte algo nuevo sin perder tu identidad musical.'
-                  : 'Pedile una nueva tanda cuando quieras abrir un poco el radar sin salirte de tu eje.'}
+                  : isSearching
+                    ? 'Buscá tranquilo: el Oráculo se resume para no taparte los resultados.'
+                    : 'Pedile una nueva tanda cuando quieras abrir un poco el radar sin salirte de tu eje.'}
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={[styles.oracleButton, isOracleBusy && styles.oracleButtonDisabled]}
-              disabled={isOracleBusy}
-              onPress={() => onRunOracle?.(trimmedQuery)}>
-              {isOracleBusy ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Sparkles color="white" size={16} />
-                  <Text style={styles.oracleButtonText}>
-                    {oracleRecommendations.length ? 'Otra tanda' : 'Preguntarle'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
+            <View style={styles.oracleActions}>
+              {isSearching && oracleRecommendations.length ? (
+                <Pressable
+                  style={styles.oracleGhostButton}
+                  onPress={() => setQuery('')}>
+                  <ChevronDown color="#E9D5FF" size={14} />
+                  <Text style={styles.oracleGhostButtonText}>Ver tanda</Text>
+                </Pressable>
+              ) : null}
+
+              <TouchableOpacity
+                style={[styles.oracleButton, isOracleBusy && styles.oracleButtonDisabled]}
+                disabled={isOracleBusy}
+                onPress={() => onRunOracle?.(trimmedQuery)}>
+                {isOracleBusy ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <>
+                    <Sparkles color="white" size={16} />
+                    <Text style={styles.oracleButtonText}>
+                      {oracleRecommendations.length ? 'Otra tanda' : 'Preguntarle'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.oracleMetaBlock}>
@@ -356,7 +363,7 @@ const SearchScreen = ({
             <Text style={styles.oracleMetaText}>{oracleHelperText}</Text>
           </View>
 
-          {showExpandedOracle && oracleRecommendations.length ? (
+          {showExpandedOracle ? (
             <ScrollView
               horizontal={true}
               showsHorizontalScrollIndicator={false}
@@ -488,7 +495,7 @@ const SearchScreen = ({
                       }>
                       <Text style={styles.artistName} numberOfLines={1}>
                         {item.artist}
-                        {item.year ? ` - ${item.year}` : ''}
+                        {item.year ? ` · ${item.year}` : ''}
                       </Text>
                     </TouchableOpacity>
                     <View style={styles.resultMetaRow}>
@@ -526,7 +533,7 @@ const styles = StyleSheet.create({
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0A0A0A',
+    backgroundColor: 'rgba(10, 10, 10, 0.92)',
     borderRadius: 18,
     paddingHorizontal: 15,
     marginBottom: 12,
@@ -544,6 +551,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
+    flexGrow: 1,
     paddingBottom: 180,
   },
   catalogCard: {
@@ -584,6 +592,7 @@ const styles = StyleSheet.create({
   },
   oracleCompactCard: {
     gap: 10,
+    paddingBottom: 14,
   },
   oracleHeader: {
     flexDirection: 'row',
@@ -593,6 +602,11 @@ const styles = StyleSheet.create({
   },
   oracleHeaderStack: {
     flexDirection: 'column',
+  },
+  oracleActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   oracleCopy: {
     flex: 1,
@@ -631,6 +645,23 @@ const styles = StyleSheet.create({
   },
   oracleButtonText: {
     color: 'white',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  oracleGhostButton: {
+    minHeight: 42,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(196,181,253,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  oracleGhostButtonText: {
+    color: '#E9D5FF',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -820,104 +851,100 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: 'white',
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '900',
-    marginVertical: 15,
+    marginBottom: 12,
   },
   genreGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    gap: 12,
   },
   genreCard: {
     width: '48%',
-    backgroundColor: 'rgba(168, 85, 247, 0.08)',
-    padding: 25,
-    borderRadius: 16,
-    marginBottom: 15,
-    alignItems: 'center',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.3)',
+    borderColor: 'rgba(168,85,247,0.22)',
+    backgroundColor: 'rgba(18, 9, 28, 0.84)',
+    minHeight: 82,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 12,
   },
   genreText: {
     color: '#E9D5FF',
-    fontWeight: 'bold',
+    fontWeight: '800',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  emptyState: {
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  emptyText: {
+    color: '#D1D5DB',
+    textAlign: 'center',
+    lineHeight: 21,
+    marginTop: 10,
+  },
+  emptyHelper: {
+    color: '#A78BFA',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 12,
   },
   resultsGroup: {
-    paddingTop: 6,
+    gap: 12,
   },
   resultItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 12,
+    paddingVertical: 10,
   },
   albumCover: {
-    width: 60,
-    height: 60,
-    borderRadius: 10,
-    marginRight: 15,
-    backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: '#222',
+    width: 58,
+    height: 58,
+    borderRadius: 14,
+    backgroundColor: '#111827',
   },
   infoContainer: {
     flex: 1,
+    gap: 4,
   },
   albumTitle: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '800',
   },
   artistName: {
-    color: '#A855F7',
+    color: '#A78BFA',
     fontSize: 14,
-    marginTop: 4,
   },
   resultMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flexWrap: 'wrap',
-    marginTop: 8,
+    marginTop: 2,
   },
   sourceBadge: {
-    alignSelf: 'flex-start',
-    color: '#D1D5DB',
+    color: '#E5E7EB',
     fontSize: 11,
     fontWeight: '800',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   playbackBadgeText: {
-    color: '#CBD5E1',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  emptyState: {
-    marginTop: 6,
-    backgroundColor: '#0A0A0A',
-    borderRadius: 22,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#1A1A1A',
-  },
-  emptyTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: '#9CA3AF',
-    lineHeight: 20,
-  },
-  emptyHelper: {
     color: '#C4B5FD',
-    lineHeight: 20,
-    marginTop: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
 });

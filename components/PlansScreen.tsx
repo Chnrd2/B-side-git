@@ -108,7 +108,7 @@ const PlansScreen = ({ currentPlan, onBack, onSelectPlan }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050816', paddingTop: 55 },
+  container: { flex: 1, backgroundColor: 'transparent', paddingTop: 55 },
   header: {
     paddingHorizontal: 20,
     paddingBottom: 20,

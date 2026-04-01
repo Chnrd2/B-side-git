@@ -95,7 +95,7 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? 40 : 0,
   },
   header: {

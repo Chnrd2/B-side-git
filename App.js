@@ -3,6 +3,7 @@ import 'react-native-gesture-handler';
 import React from 'react';
 import {
   Animated,
+  LogBox,
   SafeAreaView,
   StatusBar,
   StyleSheet,
@@ -22,6 +23,8 @@ import ShareStoryCard from './components/ShareStoryCard';
 import useBSideApp from './hooks/useBSideApp';
 import AppNavigator from './navigation/AppNavigator';
 import { navigationTheme } from './theme/bsideTheme';
+
+LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
 export default function App() {
   const app = useBSideApp();

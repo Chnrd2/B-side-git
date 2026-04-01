@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -66,8 +67,8 @@ const ChatScreen = ({
   const shellStyles = useMemo(
     () => ({
       backgroundColor: chatBgColor,
-      headerColor: rgbaFromHex(chatBgColor, 0.9),
-      panelColor: rgbaFromHex(chatBgColor, 0.94),
+      headerColor: rgbaFromHex(chatBgColor, 0.92),
+      panelColor: rgbaFromHex(chatBgColor, 0.95),
       borderColor: rgbaFromHex('#FFFFFF', 0.08),
     }),
     [chatBgColor]
@@ -82,7 +83,7 @@ const ChatScreen = ({
   const handleShareAlbum = () => {
     onSendMessage(chat.id, {
       messageType: 'recommendation',
-      text: 'Te dejo esto para escuchar con tiempo.',
+      text: 'Te dejé esta recomendación.',
       albumId: 'demo-recommendation-1',
       albumCover:
         'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2b/3e/2e/2b3e2e5c-9c9e-0e9e-5e5e-5e5e5e5e5e5e/196362125692.jpg/600x600bb.jpg',
@@ -106,6 +107,14 @@ const ChatScreen = ({
     setChatBgColor(color);
     onUpdateTheme?.(chat?.id, color);
     setIsBgMenuVisible(false);
+  };
+
+  const handleOpenProfile = () => {
+    const normalizedHandle = `@${`${chat?.user?.handle || ''}`.replace('@', '')}`;
+
+    if (normalizedHandle !== '@') {
+      onOpenProfile?.(normalizedHandle);
+    }
   };
 
   const renderMessage = ({ item }) => {
@@ -191,6 +200,8 @@ const ChatScreen = ({
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: shellStyles.backgroundColor }]}>
+      <StatusBar barStyle="light-content" backgroundColor={chatBgColor} />
+
       <View
         style={[
           styles.header,
@@ -207,7 +218,8 @@ const ChatScreen = ({
           <TouchableOpacity
             style={styles.headerProfileTouch}
             activeOpacity={0.85}
-            onPress={() => onOpenProfile?.(chat.user.handle)}>
+            onPress={handleOpenProfile}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <View style={styles.avatar}>
               {chat.user.avatarUrl ? (
                 <Image source={{ uri: chat.user.avatarUrl }} style={styles.avatarImage} />
@@ -277,7 +289,10 @@ const ChatScreen = ({
           <View
             style={[
               styles.modalContent,
-              { backgroundColor: shellStyles.panelColor, borderColor: shellStyles.borderColor },
+              {
+                backgroundColor: shellStyles.panelColor,
+                borderColor: shellStyles.borderColor,
+              },
             ]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Fondo del chat</Text>
@@ -307,7 +322,7 @@ const ChatScreen = ({
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: Platform.OS === 'android' ? 36 : 0 },
+  container: { flex: 1, paddingTop: Platform.OS === 'android' ? 16 : 0 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -336,10 +351,10 @@ const styles = StyleSheet.create({
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
   headerName: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  headerHandle: { color: '#8A2BE2', fontSize: 12 },
+  headerHandle: { color: '#A855F7', fontSize: 12 },
   headerRight: { flexDirection: 'row', gap: 6 },
   iconBtn: { padding: 8 },
-  messagesContainer: { padding: 15, paddingBottom: 20 },
+  messagesContainer: { padding: 15, paddingBottom: 32 },
   messageRow: { marginBottom: 20, position: 'relative' },
   rowMe: { alignItems: 'flex-end' },
   rowThem: { alignItems: 'flex-start' },
