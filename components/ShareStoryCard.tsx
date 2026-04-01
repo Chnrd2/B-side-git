@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Copy, Disc, Instagram, Share2, X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { buildProfileTheme } from '../data/appState';
 
@@ -46,10 +47,10 @@ const StoryAlbumTile = ({ album, rank, compact = false }) => {
 
       <View style={styles.tileCopy}>
         <Text style={styles.tileTitle} numberOfLines={1}>
-          {album?.title || 'Tu pr\u00f3ximo fijo'}
+          {album?.title || 'Tu próximo fijo'}
         </Text>
         <Text style={styles.tileArtist} numberOfLines={1}>
-          {album?.artist || 'Eleg\u00ed un disco'}
+          {album?.artist || 'Elegí un disco'}
         </Text>
       </View>
     </View>
@@ -57,6 +58,8 @@ const StoryAlbumTile = ({ album, rank, compact = false }) => {
 };
 
 const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
+  const insets = useSafeAreaInsets();
+
   if (!visible) return null;
 
   const theme = buildProfileTheme(user);
@@ -66,9 +69,10 @@ const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
     topFive.push(null);
   }
 
+  const safeUsername = `${username || user?.handle || ''}`.replace('@', '');
   const shareSummary = [
     'Mi lado B en B-Side',
-    `@${`${username || user?.handle || ''}`.replace('@', '')}`,
+    `@${safeUsername}`,
     ...topFive
       .filter(Boolean)
       .map(
@@ -114,90 +118,102 @@ const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
   };
 
   return (
-    <Modal animationType="fade" transparent={true} visible={visible}>
-      <View style={styles.overlay}>
-        <TouchableOpacity style={styles.closeArea} onPress={onClose}>
-          <View style={styles.closeBtn}>
-            <X color="white" size={24} />
+    <Modal animationType="fade" transparent visible={visible}>
+      <View
+        style={[
+          styles.overlay,
+          {
+            paddingTop: Math.max(insets.top + 12, 24),
+            paddingBottom: Math.max(insets.bottom + 20, 28),
+          },
+        ]}>
+        <View style={styles.modalStack}>
+          <View style={styles.closeBar}>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <X color="white" size={22} />
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
 
-        <LinearGradient colors={theme.colors} style={styles.card}>
-          {theme.wallpaperUrl ? (
-            <Image
-              source={{ uri: theme.wallpaperUrl }}
-              style={styles.wallpaper}
-              resizeMode="cover"
+          <LinearGradient colors={theme.colors} style={styles.card}>
+            {theme.wallpaperUrl ? (
+              <Image
+                source={{ uri: theme.wallpaperUrl }}
+                style={styles.wallpaper}
+                resizeMode="cover"
+              />
+            ) : null}
+
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: `rgba(4, 5, 10, ${theme.overlay})` },
+              ]}
             />
-          ) : null}
 
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              { backgroundColor: `rgba(4, 5, 10, ${theme.overlay})` },
-            ]}
-          />
-
-          <View
-            style={[
-              styles.logoContainer,
-              {
-                backgroundColor: `${theme.accent}22`,
-                borderColor: `${theme.accent}55`,
-              },
-            ]}>
-            <Disc color="#F3E8FF" size={22} />
-            <Text style={styles.appName}>B-SIDE</Text>
-          </View>
-
-          <View style={styles.headerBlock}>
-            <Text style={styles.eyebrow}>TU TOP 5 HIST\u00d3RICO</Text>
-            <Text style={styles.title}>MI LADO B</Text>
-            <Text style={[styles.handle, { color: theme.accent }]}>@{username}</Text>
-          </View>
-
-          <View style={styles.gridContainer}>
-            <View style={styles.topRow}>
-              {topFive.slice(0, 3).map((album, index) => (
-                <StoryAlbumTile
-                  key={`top-${index}`}
-                  album={album}
-                  rank={index + 1}
-                  compact
-                />
-              ))}
+            <View
+              style={[
+                styles.logoContainer,
+                {
+                  backgroundColor: `${theme.accent}22`,
+                  borderColor: `${theme.accent}55`,
+                },
+              ]}>
+              <Disc color="#F3E8FF" size={22} />
+              <Text style={styles.appName}>B-SIDE</Text>
             </View>
 
-            <View style={styles.bottomRow}>
-              {topFive.slice(3, 5).map((album, index) => (
-                <StoryAlbumTile
-                  key={`bottom-${index}`}
-                  album={album}
-                  rank={index + 4}
-                />
-              ))}
+            <View style={styles.headerBlock}>
+              <Text style={styles.eyebrow}>TU TOP 5 HISTÓRICO</Text>
+              <Text style={styles.title}>MI LADO B</Text>
+              <Text style={[styles.handle, { color: theme.accent }]}>@{safeUsername}</Text>
             </View>
+
+            <View style={styles.gridContainer}>
+              <View style={styles.topRow}>
+                {topFive.slice(0, 3).map((album, index) => (
+                  <StoryAlbumTile
+                    key={`top-${index}`}
+                    album={album}
+                    rank={index + 1}
+                    compact
+                  />
+                ))}
+              </View>
+
+              <View style={styles.bottomRow}>
+                {topFive.slice(3, 5).map((album, index) => (
+                  <StoryAlbumTile
+                    key={`bottom-${index}`}
+                    album={album}
+                    rank={index + 4}
+                  />
+                ))}
+              </View>
+            </View>
+
+            <Text style={styles.caption}>
+              Cinco discos para contar de dónde viene tu gusto.
+            </Text>
+          </LinearGradient>
+
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => void handleCopySummary()}>
+              <Copy color="white" size={22} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.iconBtn, styles.instaBtn]}
+              onPress={() => void handleInstagramShare()}>
+              <Instagram color="white" size={28} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.iconBtn} onPress={() => void handleShare()}>
+              <Share2 color="white" size={22} />
+            </TouchableOpacity>
           </View>
-
-          <Text style={styles.caption}>
-            Cinco discos para contar de d\u00f3nde viene tu gusto.
-          </Text>
-        </LinearGradient>
-
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => void handleCopySummary()}>
-            <Copy color="white" size={22} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.iconBtn, styles.instaBtn]}
-            onPress={() => void handleInstagramShare()}>
-            <Instagram color="white" size={28} />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.iconBtn} onPress={() => void handleShare()}>
-            <Share2 color="white" size={22} />
-          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -212,18 +228,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
   },
-  closeArea: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
+  modalStack: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  closeBar: {
+    width: width * 0.88,
+    maxWidth: 760,
+    alignItems: 'flex-end',
+    marginBottom: 14,
   },
   closeBtn: {
     backgroundColor: '#111827',
-    borderRadius: 20,
-    padding: 8,
+    borderRadius: 999,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#334155',
+    zIndex: 20,
+    elevation: 10,
   },
   card: {
     width: width * 0.88,
@@ -374,7 +396,7 @@ const styles = StyleSheet.create({
   actionsRow: {
     flexDirection: 'row',
     gap: 25,
-    marginTop: 35,
+    marginTop: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
