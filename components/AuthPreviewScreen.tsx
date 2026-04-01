@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -67,8 +67,8 @@ const AuthPreviewScreen = ({
 
     if (password.trim().length < 6) {
       Alert.alert(
-        'Contrasena muy corta',
-        'Usa al menos 6 caracteres para la prueba de registro.'
+        'Contraseña muy corta',
+        'Usá al menos 6 caracteres para crear la cuenta.'
       );
       return;
     }
@@ -85,7 +85,7 @@ const AuthPreviewScreen = ({
       Alert.alert(
         'Registro iniciado',
         response.data?.session?.user
-          ? 'La cuenta quedo conectada y lista para usarse.'
+          ? 'La cuenta quedó conectada y lista para usarse.'
           : 'Revisa tu mail para confirmar la cuenta real.'
       );
       return;
@@ -100,7 +100,7 @@ const AuthPreviewScreen = ({
     if (!trimmedEmail || !password.trim()) {
       Alert.alert(
         'Faltan datos',
-        'Escribe email y contrasena para iniciar sesion.'
+        'Escribí email y contraseña para iniciar sesión.'
       );
       return;
     }
@@ -113,18 +113,18 @@ const AuthPreviewScreen = ({
     });
 
     if (response.ok) {
-      Alert.alert('Sesion iniciada', 'La cuenta real ya esta activa.');
+      Alert.alert('Sesión iniciada', 'La cuenta real ya está activa.');
       return;
     }
 
-    Alert.alert('No pudimos iniciar sesion', response.message);
+    Alert.alert('No pudimos iniciar sesión', response.message);
   };
 
   const handleMagicLink = async () => {
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail) {
-      Alert.alert('Falta email', 'Escribe un email para enviar el link.');
+      Alert.alert('Falta email', 'Escribí un email para enviar el acceso.');
       return;
     }
 
@@ -133,24 +133,24 @@ const AuthPreviewScreen = ({
 
     if (response.ok) {
       Alert.alert(
-        'Magic link enviado',
-        'Busca el mail de acceso rapido para continuar.'
+        'Acceso por mail enviado',
+        'Buscá el mail de acceso rápido para continuar.'
       );
       return;
     }
 
-    Alert.alert('No pudimos enviar el link', response.message);
+    Alert.alert('No pudimos enviar el acceso', response.message);
   };
 
   const handleSignOut = async () => {
     const response = await onSignOut();
 
     if (!response.ok) {
-      Alert.alert('No pudimos cerrar la sesion', response.message);
+      Alert.alert('No pudimos cerrar la sesión', response.message);
       return;
     }
 
-    Alert.alert('Sesion cerrada', 'La cuenta real se desconecto.');
+    Alert.alert('Sesión cerrada', 'La cuenta real se desconectó.');
   };
 
   return (
@@ -161,7 +161,7 @@ const AuthPreviewScreen = ({
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <ChevronLeft color="white" size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Auth y base de datos</Text>
+        <Text style={styles.headerTitle}>Cuenta y acceso</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -169,12 +169,11 @@ const AuthPreviewScreen = ({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
-          <Text style={styles.eyebrow}>STACK RECOMENDADO</Text>
-          <Text style={styles.title}>Supabase Auth + Postgres + RLS</Text>
+          <Text style={styles.eyebrow}>CUENTAS Y DATOS</Text>
+          <Text style={styles.title}>Acceso, cuenta y datos</Text>
           <Text style={styles.subtitle}>
-            Para B-Side es una base muy viable: login, sesion, perfiles,
-            resenas, listas, likes y permisos por usuario sin inflar la
-            arquitectura.
+            Esta base te permite tener acceso real, perfiles, reseñas,
+            listas, likes y permisos por usuario sin volver pesada la app.
           </Text>
         </View>
 
@@ -186,10 +185,10 @@ const AuthPreviewScreen = ({
             </Text>
           </View>
           <Text style={styles.statusText}>
-            Proyecto: {supabaseStatus.projectHost}
+            Proyecto conectado: {supabaseStatus.projectHost}
           </Text>
           <Text style={styles.statusText}>
-            Sesion:{' '}
+            Sesión:{' '}
             {authSession?.user
               ? `activa como ${authSession.user.email || currentUser.email}`
               : 'sin login real'}
@@ -204,11 +203,11 @@ const AuthPreviewScreen = ({
 
         {!supabaseStatus.isConfigured ? (
           <View style={styles.pendingCard}>
-            <Text style={styles.pendingTitle}>Lo que todavia falta</Text>
+            <Text style={styles.pendingTitle}>Lo que todavía falta</Text>
             <Text style={styles.pendingText}>
-              Ahora mismo la app sigue en modo demo porque no hay `.env` real.
-              En la captura que mandaste ya estas en el lugar correcto para el
-              schema: solo falta pegar `supabase/schema.sql` y ejecutar.
+              La app todavía está usando el modo local porque falta
+              terminar la conexión real. Cuando eso quede listo, la cuenta
+              se va a sincronizar con perfiles, listas y reseñas.
             </Text>
 
             {SUPABASE_DASHBOARD_PATHS.map((item) => (
@@ -219,7 +218,7 @@ const AuthPreviewScreen = ({
             ))}
 
             <View style={styles.localUrlsCard}>
-              <Text style={styles.localUrlsTitle}>URL local para Auth</Text>
+              <Text style={styles.localUrlsTitle}>URLs locales recomendadas</Text>
               {SUPABASE_LOCAL_URLS.map((url) => (
                 <View key={url} style={styles.localUrlBadge}>
                   <Text style={styles.localUrlText}>{url}</Text>
@@ -233,21 +232,21 @@ const AuthPreviewScreen = ({
           <View style={styles.summaryRow}>
             <Database color="#E9D5FF" size={18} />
             <Text style={styles.summaryText}>
-              Tablas listas para perfiles, resenas, comentarios, likes, listas,
+              Tablas listas para perfiles, reseñas, comentarios, likes, listas,
               follows, mensajes, reportes y suscripciones.
             </Text>
           </View>
           <View style={styles.summaryRow}>
             <ShieldCheck color="#E9D5FF" size={18} />
             <Text style={styles.summaryText}>
-              Row Level Security para que cada persona vea y edite lo que le
-              corresponde.
+              Permisos por usuario para que cada persona vea y edite solo lo
+              que le corresponde.
             </Text>
           </View>
           <View style={styles.summaryRow}>
             <LockKeyhole color="#E9D5FF" size={18} />
             <Text style={styles.summaryText}>
-              Email/password, magic link y storage para avatar y wallpapers.
+              Email, contraseña, acceso por mail y guardado de avatar y fondos.
             </Text>
           </View>
         </View>
@@ -255,9 +254,9 @@ const AuthPreviewScreen = ({
         <View style={styles.formCard}>
           <Text style={styles.cardTitle}>Cuenta actual</Text>
           <Text style={styles.cardText}>
-            Si hay credenciales en `.env`, ya puedes registrar, iniciar sesion y
-            sincronizar el perfil real. Si no, igual puedes seguir usando el
-            modo demo.
+            Si la conexión ya está activa, podés registrar, iniciar
+            sesión y sincronizar tu perfil. Si no, igual podés seguir
+            usando el modo local.
           </Text>
 
           <View style={styles.inputGroup}>
@@ -288,7 +287,7 @@ const AuthPreviewScreen = ({
             <LockKeyhole color="#A855F7" size={18} />
             <TextInput
               style={styles.input}
-              placeholder="Contrasena"
+              placeholder="Contraseña"
               placeholderTextColor="#666"
               value={password}
               secureTextEntry
@@ -300,7 +299,7 @@ const AuthPreviewScreen = ({
             style={styles.primaryButton}
             onPress={handleSaveLocal}
             disabled={isAuthBusy}>
-            <Text style={styles.primaryText}>Guardar cuenta demo</Text>
+            <Text style={styles.primaryText}>Guardar datos locales</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -318,14 +317,14 @@ const AuthPreviewScreen = ({
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={isAuthBusy}>
-            <Text style={styles.loginText}>Iniciar sesion</Text>
+            <Text style={styles.loginText}>Iniciar sesión</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.ghostButton}
             onPress={handleMagicLink}
             disabled={isAuthBusy}>
-            <Text style={styles.ghostText}>Enviar magic link</Text>
+            <Text style={styles.ghostText}>Enviar acceso por mail</Text>
           </TouchableOpacity>
 
           {authSession?.user ? (
@@ -343,7 +342,7 @@ const AuthPreviewScreen = ({
               onPress={handleSignOut}
               disabled={isAuthBusy}>
               <LogOut color="white" size={18} />
-              <Text style={styles.signOutText}>Cerrar sesion real</Text>
+              <Text style={styles.signOutText}>Cerrar sesión</Text>
             </TouchableOpacity>
           ) : null}
 
@@ -369,7 +368,7 @@ const AuthPreviewScreen = ({
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Buckets sugeridos</Text>
+          <Text style={styles.sectionTitle}>Espacios para archivos</Text>
           <View style={styles.badgesWrap}>
             {SUPABASE_STORAGE_BUCKETS.map((bucketName) => (
               <View key={bucketName} style={styles.badge}>
@@ -380,7 +379,7 @@ const AuthPreviewScreen = ({
         </View>
 
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Setup rapido</Text>
+          <Text style={styles.sectionTitle}>Pasos de conexión</Text>
           {SUPABASE_SETUP_STEPS.map((step) => (
             <View key={step} style={styles.stepRow}>
               <View style={styles.stepDot} />
@@ -623,3 +622,4 @@ const styles = StyleSheet.create({
 });
 
 export default AuthPreviewScreen;
+

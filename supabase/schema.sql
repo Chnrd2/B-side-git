@@ -99,6 +99,9 @@ create table if not exists public.messages (
   created_at timestamptz not null default timezone('utc', now())
 );
 
+alter table public.messages
+  add column if not exists read_at timestamptz;
+
 create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
   reporter_id uuid not null references public.profiles (id) on delete cascade,
@@ -150,6 +153,7 @@ create index if not exists reviews_user_id_idx on public.reviews (user_id);
 create index if not exists review_comments_review_id_idx on public.review_comments (review_id);
 create index if not exists lists_user_id_idx on public.lists (user_id);
 create index if not exists messages_pair_idx on public.messages (sender_id, receiver_id, created_at desc);
+create index if not exists messages_receiver_read_idx on public.messages (receiver_id, read_at, created_at desc);
 create index if not exists reports_status_idx on public.reports (status, created_at desc);
 create index if not exists listening_events_user_id_idx on public.listening_events (user_id, created_at desc);
 create index if not exists notifications_recipient_id_idx on public.notifications (recipient_id, created_at desc);
@@ -350,6 +354,13 @@ create policy "Users send own messages"
 on public.messages
 for insert
 with check (auth.uid() = sender_id);
+
+drop policy if exists "Users mark received messages as read" on public.messages;
+create policy "Users mark received messages as read"
+on public.messages
+for update
+using (auth.uid() = receiver_id)
+with check (auth.uid() = receiver_id);
 
 drop policy if exists "Users read own reports" on public.reports;
 create policy "Users read own reports"

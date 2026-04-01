@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Globe2, Lock, Plus } from 'lucide-react-native';
+import { Clock3, Globe2, Lock, Plus } from 'lucide-react-native';
 
-const ListsScreen = ({ lists, onOpenList, onCreateList }) => {
+const ListsScreen = ({ lists, wishlist, onOpenList, onOpenWishlist, onCreateList }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -21,6 +21,27 @@ const ListsScreen = ({ lists, onOpenList, onCreateList }) => {
           <Plus color="white" size={24} />
         </TouchableOpacity>
       </View>
+
+      {wishlist ? (
+        <TouchableOpacity
+          style={styles.wishlistCard}
+          activeOpacity={0.92}
+          onPress={onOpenWishlist}>
+          <View style={styles.wishlistBadge}>
+            <Clock3 color="#E9D5FF" size={18} />
+          </View>
+
+          <View style={styles.wishlistBody}>
+            <Text style={styles.wishlistEyebrow}>LISTA PRIVADA</Text>
+            <Text style={styles.wishlistTitle}>{wishlist.name}</Text>
+            <Text style={styles.wishlistText}>
+              {wishlist.items.length === 0
+                ? 'Guardá discos para escucharlos con más tiempo.'
+                : `${wishlist.items.length} discos en espera para tu próxima sesión.`}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ) : null}
 
       <FlatList
         data={lists}
@@ -55,7 +76,7 @@ const ListsScreen = ({ lists, onOpenList, onCreateList }) => {
                   <Lock color="#FDE68A" size={12} />
                 )}
                 <Text style={styles.visibilityText}>
-                  {item.isPublic ? 'Publica' : 'Privada'}
+                  {item.isPublic ? 'Pública' : 'Privada'}
                 </Text>
               </View>
             </View>
@@ -99,6 +120,44 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
     padding: 12,
     borderRadius: 18,
+  },
+  wishlistCard: {
+    marginBottom: 18,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.24)',
+    backgroundColor: 'rgba(18,23,43,0.82)',
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  wishlistBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(168,85,247,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  wishlistBody: {
+    flex: 1,
+    gap: 4,
+  },
+  wishlistEyebrow: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  wishlistTitle: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  wishlistText: {
+    color: '#D1D5DB',
+    lineHeight: 20,
   },
   gridContent: {
     paddingBottom: 140,
@@ -152,3 +211,4 @@ const styles = StyleSheet.create({
 });
 
 export default ListsScreen;
+

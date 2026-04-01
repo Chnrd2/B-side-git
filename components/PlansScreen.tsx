@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -13,22 +13,22 @@ const PLANS = [
     id: 'free',
     title: 'Free',
     price: '$0',
-    caption: 'Para explorar y compartir lo basico.',
+    caption: 'Para explorar y compartir lo básico.',
     features: [
-      'Perfil, feed, likes, comentarios y resenas',
+      'Perfil, feed, likes, comentarios y reseñas',
       'Listas personales',
-      'Chat basico',
-      'Personalizacion base',
+      'Chat básico',
+      'Personalización base',
     ],
   },
   {
     id: 'plus',
     title: 'Plus',
     price: '$4.99',
-    caption: 'Freemium simple, estetico y logico para esta app.',
+    caption: 'Freemium simple, estético y lógico para esta app.',
     features: [
-      'Mas personalizacion de fondo y perfil',
-      'Stats personales y tops historicos',
+      'Más personalización de fondo y perfil',
+      'Stats personales y tops históricos',
       'Listas avanzadas y templates',
       'Insignias y extras para usuarios muy fan',
     ],
@@ -51,11 +51,11 @@ const PlansScreen = ({ currentPlan, onBack, onSelectPlan }) => {
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>
-            La mejor monetizacion aca parece ser freemium
+            La mejor monetización acá parece ser freemium
           </Text>
           <Text style={styles.heroText}>
-            Mantiene el corazon social gratis y cobra por herramientas,
-            estetica y profundidad para el usuario mas fanatico.
+            Mantiene el corazón social gratis y cobra por herramientas,
+            estética y profundidad para el usuario más fanático.
           </Text>
         </View>
 
@@ -182,3 +182,4 @@ const styles = StyleSheet.create({
 });
 
 export default PlansScreen;
+

@@ -16,6 +16,7 @@ import CreateListModal from './components/CreateListModal';
 import CreateReviewScreen from './components/CreateReviewScreen';
 import MiniPlayer from './components/MiniPlayer';
 import OnboardingScreen from './components/OnboardingScreen';
+import RecommendAlbumModal from './components/RecommendAlbumModal';
 import ShareReviewCard from './components/ShareReviewCard';
 import ShareStoryCard from './components/ShareStoryCard';
 import useBSideApp from './hooks/useBSideApp';
@@ -73,6 +74,15 @@ export default function App() {
             visible={app.isCreateListVisible}
             onClose={app.closeCreateListModal}
             onSubmit={app.createList}
+            defaultIsPublic={!app.preferences.privateListsByDefault}
+          />
+
+          <RecommendAlbumModal
+            visible={Boolean(app.recommendedAlbum)}
+            album={app.recommendedAlbum}
+            chats={app.visibleChats}
+            onClose={app.closeRecommendAlbum}
+            onSubmit={app.recommendAlbumToFriend}
           />
 
           <CreateReviewScreen

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -47,13 +47,13 @@ const CreateReviewScreen = ({
 
             <View style={styles.headerCopy}>
               <Text style={styles.headerTitle}>
-                {initialText ? 'Editar' : 'Resenar'}
+                {initialText ? 'Editar' : 'Reseñar'}
               </Text>
               {isWhileListening ? (
                 <View style={styles.contextBadge}>
                   <Headphones color="#C4B5FD" size={14} />
                   <Text style={styles.contextBadgeText}>
-                    Review while listening
+                    Mientras suena
                   </Text>
                 </View>
               ) : null}
@@ -128,8 +128,8 @@ const CreateReviewScreen = ({
             style={styles.input}
             placeholder={
               isWhileListening
-                ? 'Que te esta pegando de este tema justo ahora?'
-                : 'Escribe tu resena aca...'
+                ? '¿Qué te está pegando de este tema justo ahora?'
+                : 'Escribí tu reseña acá...'
             }
             placeholderTextColor="#555"
             multiline={true}
@@ -231,3 +231,4 @@ const styles = StyleSheet.create({
 });
 
 export default CreateReviewScreen;
+

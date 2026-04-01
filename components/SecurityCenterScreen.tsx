@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -35,11 +35,11 @@ const SecurityCenterScreen = ({
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <Text style={styles.heroTitle}>
-            Lo minimo para que una comunidad musical se sienta segura
+            Lo mínimo para que una comunidad musical se sienta segura
           </Text>
           <Text style={styles.heroText}>
-            Aunque siga en demo, esta parte conviene definirla temprano para no
-            improvisarla despues.
+            Esta parte conviene resolverla temprano para que la experiencia se
+            sienta cuidada desde el primer uso.
           </Text>
         </View>
 
@@ -48,7 +48,7 @@ const SecurityCenterScreen = ({
             <View style={styles.toggleTextBlock}>
               <Text style={styles.toggleTitle}>Reportes de contenido</Text>
               <Text style={styles.toggleText}>
-                Base para denunciar resenas, comentarios, perfiles y mensajes.
+                Base para denunciar reseñas, comentarios, perfiles y mensajes.
               </Text>
             </View>
             <Switch
@@ -63,9 +63,9 @@ const SecurityCenterScreen = ({
 
           <View style={styles.toggleRow}>
             <View style={styles.toggleTextBlock}>
-              <Text style={styles.toggleTitle}>Corte de sesion sensible</Text>
+              <Text style={styles.toggleTitle}>Corte de sesión sensible</Text>
               <Text style={styles.toggleText}>
-                Placeholder para cerrar sesiones en dispositivos inactivos.
+                Ayuda a cerrar sesiones en dispositivos inactivos.
               </Text>
             </View>
             <Switch
@@ -99,7 +99,7 @@ const SecurityCenterScreen = ({
             <View style={styles.toggleTextBlock}>
               <Text style={styles.toggleTitle}>Bloqueo entre usuarios</Text>
               <Text style={styles.toggleText}>
-                Estructura minima para cortar acoso o spam directo.
+                Estructura mínima para cortar acoso o spam directo.
               </Text>
             </View>
             <Switch
@@ -114,10 +114,10 @@ const SecurityCenterScreen = ({
 
           <View style={styles.toggleRow}>
             <View style={styles.toggleTextBlock}>
-              <Text style={styles.toggleTitle}>Revision de avatar y fondo</Text>
+              <Text style={styles.toggleTitle}>Revisión de avatar y fondo</Text>
               <Text style={styles.toggleText}>
                 Deja lista la cola manual para revisar fotos antes de volverlas
-                publicas.
+                públicas.
               </Text>
             </View>
             <Switch
@@ -137,19 +137,18 @@ const SecurityCenterScreen = ({
             <Text style={styles.sectionTitle}>Seguridad de cuenta</Text>
           </View>
           <Text style={styles.sectionText}>
-            Login seguro, verificacion por mail, recuperacion de contrasena,
-            sesiones y 2FA opcional.
+            Login seguro, verificación por mail, recuperación de contraseña,
+            sesiones y doble factor opcional.
           </Text>
         </View>
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionRow}>
             <Siren color="#E9D5FF" size={18} />
-            <Text style={styles.sectionTitle}>Moderacion y abuso</Text>
+            <Text style={styles.sectionTitle}>Moderación y abuso</Text>
           </View>
           <Text style={styles.sectionText}>
-            Reportes, bloqueo entre usuarios, filtros basicos y panel de
-            revision manual.
+            Reportes, bloqueo entre usuarios, filtros básicos y revisión manual.
           </Text>
         </View>
 
@@ -159,19 +158,19 @@ const SecurityCenterScreen = ({
             <Text style={styles.sectionTitle}>Fotos de perfil y wallpapers</Text>
           </View>
           <Text style={styles.sectionText}>
-            Lo mas razonable para arrancar es una mezcla: subir imagen, marcarla
-            como pendiente, dejar revision manual y sumar deteccion automatica
-            despues con un proveedor externo.
+            Lo más razonable para arrancar es una mezcla: subir imagen, marcarla
+            como pendiente, dejar revisión manual y sumar detección automática
+            después con un proveedor externo.
           </Text>
         </View>
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionRow}>
             <LockKeyhole color="#E9D5FF" size={18} />
-            <Text style={styles.sectionTitle}>Proteccion de datos</Text>
+            <Text style={styles.sectionTitle}>Protección de datos</Text>
           </View>
           <Text style={styles.sectionText}>
-            Acceso minimo, backups, logs, cifrado de secretos y rotacion de
+            Acceso mínimo, backups, logs, cifrado de secretos y rotación de
             credenciales.
           </Text>
         </View>
@@ -179,11 +178,11 @@ const SecurityCenterScreen = ({
         <View style={styles.sectionCard}>
           <View style={styles.sectionRow}>
             <AlertTriangle color="#E9D5FF" size={18} />
-            <Text style={styles.sectionTitle}>Pendientes antes de publicar</Text>
+            <Text style={styles.sectionTitle}>Siguientes cuidados</Text>
           </View>
           <Text style={styles.sectionText}>
-            Politica de incidentes, canal de soporte, revision de dependencias,
-            cierre de sesion remoto y monitoreo de auth.
+            Política de incidentes, canal de soporte, revisión de dependencias,
+            cierre de sesión remoto y monitoreo de acceso.
           </Text>
         </View>
       </ScrollView>
@@ -248,3 +247,4 @@ const styles = StyleSheet.create({
 });
 
 export default SecurityCenterScreen;
+

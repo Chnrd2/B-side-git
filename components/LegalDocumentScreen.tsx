@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -38,7 +38,7 @@ const LegalDocumentScreen = ({ document, onBack }) => {
           <View style={styles.heroRow}>
             <FileText color="#E9D5FF" size={18} />
             <Text style={styles.heroEyebrow}>
-              {CATEGORY_LABELS[document?.category] || 'Documento interno'}
+              {CATEGORY_LABELS[document?.category] || 'Documento'}
             </Text>
           </View>
           <Text style={styles.heroTitle}>{document?.title}</Text>
@@ -46,7 +46,7 @@ const LegalDocumentScreen = ({ document, onBack }) => {
 
           <View style={styles.metaWrap}>
             <View style={styles.metaPill}>
-              <Text style={styles.metaText}>Version {document?.version}</Text>
+              <Text style={styles.metaText}>Versión {document?.version}</Text>
             </View>
             <View style={styles.metaPill}>
               <Text style={styles.metaText}>Actualizado {document?.updatedAt}</Text>
@@ -57,7 +57,7 @@ const LegalDocumentScreen = ({ document, onBack }) => {
         <View style={styles.touchpointsCard}>
           <View style={styles.sectionHeader}>
             <ShieldCheck color="#E9D5FF" size={18} />
-            <Text style={styles.sectionTitle}>Donde conviene mostrarlo</Text>
+            <Text style={styles.sectionTitle}>Dónde conviene mostrarlo</Text>
           </View>
           <View style={styles.touchpointsWrap}>
             {(document?.touchpoints || []).map((touchpoint) => (
@@ -79,10 +79,10 @@ const LegalDocumentScreen = ({ document, onBack }) => {
         ))}
 
         <View style={styles.noticeCard}>
-          <Text style={styles.noticeTitle}>Nota de trabajo</Text>
+          <Text style={styles.noticeTitle}>Versión preliminar</Text>
           <Text style={styles.noticeText}>
-            Esto sigue siendo un borrador de producto. Antes de publicar,
-            conviene revisarlo con alguien de legal y adaptarlo al pais, al
+            Este texto todavía puede ajustarse antes de publicar. Conviene
+            revisarlo con alguien de legal y adaptarlo al país, al
             modelo de negocio y al proveedor de pagos que termine usando B-Side.
           </Text>
         </View>
@@ -190,3 +190,4 @@ const styles = StyleSheet.create({
 });
 
 export default LegalDocumentScreen;
+

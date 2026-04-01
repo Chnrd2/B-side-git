@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 
 import { buildProfileTheme } from '../data/appState';
+import { isSpotifyCatalogConfigured } from '../lib/musicCatalog';
 import { getSupabaseStatus } from '../lib/supabase';
 
 const SECTION_CONFIG = [
@@ -26,19 +27,19 @@ const SECTION_CONFIG = [
     icon: ShieldAlert,
     title: 'Seguridad y confianza',
     items: [
-      'Reportes, bloqueo y controles basicos de abuso.',
-      'Sesiones, verificacion por mail y login alerts.',
-      'Backups, rate limits y proteccion de APIs.',
-      'Politica de contenido y copyright musical.',
+      'Reportes, bloqueo y controles básicos de abuso.',
+      'Sesiones, verificación por mail y alertas de acceso.',
+      'Backups, límites de uso y protección de APIs.',
+      'Política de contenido y copyright musical.',
     ],
   },
   {
     id: 'legal',
     icon: FileText,
-    title: 'Legal y politicas',
+    title: 'Legal y políticas',
     items: [
-      'Terminos y condiciones.',
-      'Politica de privacidad.',
+      'Términos y condiciones.',
+      'Política de privacidad.',
       'Lineamientos de comunidad.',
       'Condiciones del plan Plus y baja de cuenta.',
     ],
@@ -49,20 +50,20 @@ const SECTION_CONFIG = [
     title: 'Cuentas y login',
     items: [
       'Registro por mail.',
-      'Magic link y proveedores sociales.',
-      'Reset de contrasena y verificacion.',
+      'Acceso por mail y proveedores sociales.',
+      'Recuperación de contraseña y verificación.',
       'Perfiles y preferencias persistidas.',
     ],
   },
   {
     id: 'money',
     icon: CircleDollarSign,
-    title: 'Monetizacion futura',
+    title: 'Monetización futura',
     items: [
-      'Freemium con personalizacion y stats premium.',
-      'Afiliacion o compra de vinilos/merch.',
+      'Freemium con personalización y stats premium.',
+      'Afiliación o compra de vinilos/merch.',
       'Promos para lanzamientos o artistas.',
-      'Beneficios para usuarios mas activos.',
+      'Beneficios para usuarios más activos.',
     ],
   },
 ];
@@ -71,6 +72,13 @@ const ProductFoundationScreen = ({
   currentUser,
   preferences,
   notifications,
+  spotifySession,
+  spotifyStatus,
+  spotifyPlaybackStatus,
+  musicOracleStatus,
+  achievementSummary,
+  pushSupportStatus,
+  pushPermissionStatus,
   onBack,
   onResetExperience,
   onUpdatePreferences,
@@ -78,9 +86,11 @@ const ProductFoundationScreen = ({
   onOpenSecurity,
   onOpenLegal,
   onOpenPlans,
+  onConnectSpotify,
 }) => {
   const supabaseStatus = getSupabaseStatus();
   const theme = buildProfileTheme(currentUser);
+  const spotifyCatalogReady = isSpotifyCatalogConfigured();
 
   return (
     <View style={styles.container}>
@@ -96,51 +106,79 @@ const ProductFoundationScreen = ({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
-          <Text style={styles.heroEyebrow}>PRELANZAMIENTO</Text>
+          <Text style={styles.heroEyebrow}>PANORAMA GENERAL</Text>
           <Text style={styles.heroTitle}>
-            La idea ahora es dejarla solida, no apurarse a publicar.
+            Todo lo importante para que B-Side crezca con una base sólida.
           </Text>
           <Text style={styles.heroText}>
-            Esta pantalla resume lo que conviene construir antes de pensar en
-            produccion: auth, seguridad, legal, monetizacion y una experiencia
-            personalizable.
+            Acá podés seguir de cerca cuentas, seguridad, legal,
+            monetización y personalización sin mezclarlo con la
+            experiencia principal.
           </Text>
         </View>
 
         <View style={styles.snapshotCard}>
-          <Text style={styles.snapshotTitle}>Estado actual de la demo</Text>
+          <Text style={styles.snapshotTitle}>Estado actual</Text>
           <Text style={styles.snapshotText}>
-            Sesion:{' '}
+            Sesión:{' '}
             {preferences.sessionMode === 'authenticated'
               ? 'cuenta real activa'
               : preferences.sessionMode === 'member_preview'
-                ? 'preview registrada'
+                ? 'cuenta lista para terminar'
                 : 'invitado'}
           </Text>
           <Text style={styles.snapshotText}>
-            Plan: {currentUser.plan === 'plus' ? 'Plus demo' : 'Free'}
+            Plan: {currentUser.plan === 'plus' ? 'Plus' : 'Free'}
           </Text>
           <Text style={styles.snapshotText}>
             Supabase: {supabaseStatus.isConfigured ? 'configurado' : 'pendiente'}
           </Text>
           <Text style={styles.snapshotText}>
-            Personalizacion: {theme.presetName}
-            {currentUser.wallpaperUrl ? ' + wallpaper' : ''}
+            Spotify catálogo: {spotifyCatalogReady ? 'conectado' : 'pendiente'}
           </Text>
           <Text style={styles.snapshotText}>
-            Moderacion de perfil:{' '}
+            Spotify export: {spotifySession?.accessToken ? 'cuenta conectada' : spotifyStatus?.isConfigured ? 'lista para conectar' : 'pendiente'}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Spotify reproducción completa:{' '}
+            {spotifyPlaybackStatus?.label || 'pendiente'}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Oráculo B-Side:{' '}
+            {musicOracleStatus?.isConfigured ? 'IA conectada' : 'fallback local activo'}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Push del sistema:{' '}
+            {pushPermissionStatus === 'granted'
+              ? 'permisos activos'
+              : pushSupportStatus?.isWeb
+                ? 'permiso del navegador pendiente'
+                : 'permiso pendiente o dispositivo no listo'}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Personalización: {theme.presetName}
+            {currentUser.wallpaperUrl ? ' + fondo' : ''}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Moderación de perfil:{' '}
             {preferences.profileModerationEnabled ? 'activa' : 'pendiente'}
           </Text>
           <Text style={styles.snapshotText}>
+            Insignias activas: {achievementSummary?.unlockedBadges?.length || 0}
+          </Text>
+          <Text style={styles.snapshotText}>
             Notificaciones guardadas: {notifications.length}
+          </Text>
+          <Text style={styles.snapshotText}>
+            Caché local: activa
           </Text>
         </View>
 
         <View style={styles.actionsGrid}>
           <TouchableOpacity style={styles.actionCard} onPress={onOpenAuth}>
-            <Text style={styles.actionTitle}>Auth</Text>
+            <Text style={styles.actionTitle}>Cuentas</Text>
             <Text style={styles.actionText}>
-              Ver stack real, estado de variables y tablas base.
+              Revisar acceso, sesión y datos guardados.
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard} onPress={onOpenSecurity}>
@@ -152,13 +190,22 @@ const ProductFoundationScreen = ({
           <TouchableOpacity style={styles.actionCard} onPress={onOpenLegal}>
             <Text style={styles.actionTitle}>Legal</Text>
             <Text style={styles.actionText}>
-              Ver que textos y politicas necesita la app.
+              Ver qué textos y políticas necesita la app.
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionCard} onPress={onOpenPlans}>
             <Text style={styles.actionTitle}>Freemium</Text>
             <Text style={styles.actionText}>
-              Probar Plus y pensar pricing simple sin romper lo social.
+              Probar Plus y pensar un precio simple sin romper lo social.
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionCard} onPress={onConnectSpotify}>
+            <Text style={styles.actionTitle}>Spotify</Text>
+            <Text style={styles.actionText}>
+              {spotifySession?.accessToken
+                ? spotifyPlaybackStatus?.message ||
+                  'Cuenta conectada para exportar listas reales.'
+                : 'Conectá tu cuenta para exportar listas desde B-Side.'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -166,9 +213,9 @@ const ProductFoundationScreen = ({
         <View style={styles.preferenceCard}>
           <View style={styles.preferenceRow}>
             <View>
-              <Text style={styles.preferenceTitle}>Notificaciones demo</Text>
+              <Text style={styles.preferenceTitle}>Notificaciones en la app</Text>
               <Text style={styles.preferenceText}>
-                Deja visible la capa de actividad mientras iteramos la UX.
+                Mantiene a mano la actividad y los avisos importantes.
               </Text>
             </View>
             <Switch
@@ -185,7 +232,7 @@ const ProductFoundationScreen = ({
             <View>
               <Text style={styles.preferenceTitle}>Analytics locales</Text>
               <Text style={styles.preferenceText}>
-                Placeholder para una futura capa de metricas.
+                Base inicial para entender qué partes mueven más la app.
               </Text>
             </View>
             <Switch
@@ -205,10 +252,11 @@ const ProductFoundationScreen = ({
             <Text style={styles.roadmapTitle}>Siguiente bloque recomendado</Text>
           </View>
           <Text style={styles.roadmapText}>
-            1. Conectar Supabase. 2. Persistir likes/comentarios en backend.
-            3. Exponer Terms y Privacy dentro del onboarding. 4. Moderar
-            avatar y wallpaper antes de abrir perfiles publicos. 5. Definir que
-            queda en Free y que pasa a Plus.
+            1. Mostrar una vista previa del export a Spotify antes de crear la
+            playlist. 2. Llevar las push remotas a Android con dev build. 3.
+            Afinar descubrir con artistas relacionados y hubs por artista. 4.
+            Mejorar el Oráculo con prompts y señales más finas. 5. Definir qué
+            queda en Free y qué entra en Plus.
           </Text>
         </View>
 
@@ -423,3 +471,4 @@ const styles = StyleSheet.create({
 });
 
 export default ProductFoundationScreen;
+

@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import AlbumDetailScreen from '../components/AlbumDetailScreen';
+import ArtistProfileScreen from '../components/ArtistProfileScreen';
 import AuthPreviewScreen from '../components/AuthPreviewScreen';
 import ChatScreen from '../components/ChatScreen';
 import FeedScreen from '../components/FeedScreen';
@@ -13,6 +14,7 @@ import ListDetailScreen from '../components/ListDetailScreen';
 import ListsScreen from '../components/ListsScreen';
 import NotificationsCenterScreen from '../components/NotificationsCenterScreen';
 import PlansScreen from '../components/PlansScreen';
+import PrivacyCenterScreen from '../components/PrivacyCenterScreen';
 import ProfileScreen from '../components/ProfileScreen';
 import ProductFoundationScreen from '../components/ProductFoundationScreen';
 import SearchScreen from '../components/SearchScreen';
@@ -40,10 +42,7 @@ function MainTabs({ app }) {
             reviews={app.feedReviews}
             currentUserHandle={`@${app.currentUser.handle}`}
             currentTrack={app.currentTrack}
-            listeningStreak={app.listeningStreak}
             friendActivity={app.friendActivity}
-            interestingUsers={app.interestingUsers}
-            interestingAlbums={app.interestingAlbums}
             hasUnreadMessages={app.hasUnreadMessages}
             hasUnreadNotifications={app.hasUnreadNotifications}
             onDeleteReview={app.deleteReview}
@@ -63,7 +62,6 @@ function MainTabs({ app }) {
             onSelectAlbum={(album) =>
               navigation.getParent()?.navigate('AlbumDetail', { album })
             }
-            onPlaySong={app.playTrack}
             onOpenNotifications={() => {
               app.markNotificationsAsRead();
               navigation.getParent()?.navigate('Notifications');
@@ -75,8 +73,20 @@ function MainTabs({ app }) {
       <Tab.Screen name="SearchTab">
         {({ navigation }) => (
           <SearchScreen
+            interestingAlbums={app.interestingAlbums}
+            interestingArtists={app.interestingArtists}
+            oracleRecommendations={app.oracleRecommendations}
+            oracleSource={app.oracleSource}
+            oracleMessage={app.oracleMessage}
+            isOracleBusy={app.isOracleBusy}
+            hasFloatingPlayer={Boolean(app.currentTrack)}
             onSelectAlbum={(album) =>
               navigation.getParent()?.navigate('AlbumDetail', { album })
+            }
+            onPlaySong={app.playTrack}
+            onRunOracle={app.runMusicOracle}
+            onOpenArtist={(artist) =>
+              navigation.getParent()?.navigate('ArtistProfile', artist)
             }
           />
         )}
@@ -86,9 +96,15 @@ function MainTabs({ app }) {
         {({ navigation }) => (
           <ListsScreen
             lists={app.lists}
+            wishlist={app.wishlistList}
             onOpenList={(list) =>
               navigation.getParent()?.navigate('ListDetail', {
                 listId: list.id,
+              })
+            }
+            onOpenWishlist={() =>
+              navigation.getParent()?.navigate('ListDetail', {
+                listId: 'wishlist',
               })
             }
             onCreateList={app.openCreateListModal}
@@ -103,6 +119,7 @@ function MainTabs({ app }) {
             reviews={app.visibleReviews}
             top5={app.top5}
             currentTrack={app.currentTrack}
+            preferences={app.preferences}
             onPlaySong={app.playTrack}
             onDeleteReview={app.deleteReview}
             onEditReview={app.openEditReview}
@@ -111,6 +128,7 @@ function MainTabs({ app }) {
             onOpenFoundation={() =>
               navigation.getParent()?.navigate('ProductFoundation')
             }
+            onOpenPrivacy={() => navigation.getParent()?.navigate('PrivacyCenter')}
             onSaveProfile={app.saveProfile}
             onSignOut={app.signOutBackendAccount}
             sessionMode={app.preferences.sessionMode}
@@ -119,7 +137,17 @@ function MainTabs({ app }) {
             followingCount={app.currentUser.followingCount}
             listeningStreak={app.listeningStreak}
             recentListening={app.recentListening}
+            achievementSummary={app.achievementSummary}
             onOpenReviewWhileListening={app.openReviewWhileListening}
+            interestingUsers={app.interestingUsers}
+            onViewSuggestedProfile={(userHandle) => {
+              if (app.isCurrentUserHandle(userHandle)) {
+                navigation.navigate('ProfileTab');
+                return;
+              }
+
+              navigation.getParent()?.navigate('UserProfile', { userHandle });
+            }}
             isPublic={false}
           />
         )}
@@ -140,14 +168,56 @@ export default function AppNavigator({ app }) {
           <AlbumDetailScreen
             album={route.params.album}
             isPinned={app.top5.some((item) => item.id === route.params.album.id)}
+            isSavedForLater={app.isAlbumInWishlist(route.params.album)}
             onClose={() => navigation.goBack()}
             onPinToTop5={() => app.pinToTop5(route.params.album)}
             onWriteReview={() => app.openCreateReview(route.params.album)}
             onAddToList={() => app.openAddToList(route.params.album)}
+            onSaveForLater={() => app.addAlbumToWishlist(route.params.album)}
             onPlaySong={app.playTrack}
             onShareAlbum={(album) =>
               app.handleShareAlbum(album, () => navigation.goBack())
             }
+            onOpenArtist={(artist) =>
+              navigation.navigate('ArtistProfile', {
+                artistName: artist.artist,
+                artistId: artist.artistId,
+                artistUrl: artist.artistUrl,
+                source: artist.source,
+              })
+            }
+          />
+        )}
+      </RootStack.Screen>
+
+      <RootStack.Screen name="ArtistProfile">
+        {({ route, navigation }) => (
+          <ArtistProfileScreen
+            artistName={route.params.artistName || route.params.artist}
+            artistId={route.params.artistId}
+            artistUrl={route.params.artistUrl}
+            artistSnapshot={app.getArtistSnapshot(
+              route.params.artistName || route.params.artist
+            )}
+            onBack={() => navigation.goBack()}
+            onSelectAlbum={(album) => navigation.navigate('AlbumDetail', { album })}
+            onPlaySong={app.playTrack}
+            onOpenArtist={(artist) =>
+              navigation.replace('ArtistProfile', {
+                artistName: artist.artist,
+                artistId: artist.artistId,
+                artistUrl: artist.artistUrl,
+                source: artist.source,
+              })
+            }
+            onViewProfile={(userHandle) => {
+              if (app.isCurrentUserHandle(userHandle)) {
+                navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+                return;
+              }
+
+              navigation.navigate('UserProfile', { userHandle });
+            }}
           />
         )}
       </RootStack.Screen>
@@ -165,6 +235,9 @@ export default function AppNavigator({ app }) {
             onRemoveItem={app.removeListItem}
             onShuffleList={app.shuffleList}
             onToggleVisibility={app.toggleListVisibility}
+            onExportToSpotify={app.exportListToSpotify}
+            isSpotifyConnected={Boolean(app.spotifySession?.accessToken)}
+            isSpotifyExportBusy={app.isSpotifyExportBusy}
           />
         )}
       </RootStack.Screen>
@@ -187,6 +260,18 @@ export default function AppNavigator({ app }) {
           <ChatScreen
             chat={app.getChatById(route.params.chatId)}
             onSendMessage={app.sendChatMessage}
+            onUpdateTheme={app.updateChatTheme}
+            onOpenAlbum={(album) =>
+              navigation.navigate('AlbumDetail', { album })
+            }
+            onOpenProfile={(userHandle) => {
+              if (app.isCurrentUserHandle(userHandle)) {
+                navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+                return;
+              }
+
+              navigation.navigate('UserProfile', { userHandle });
+            }}
             onClose={() => navigation.goBack()}
           />
         )}
@@ -213,12 +298,14 @@ export default function AppNavigator({ app }) {
               reviews={app.visibleReviews}
               top5={viewedUser?.top5 || []}
               currentTrack={app.currentTrack}
+              preferences={app.preferences}
               onPlaySong={app.playTrack}
               onDeleteReview={app.deleteReview}
               onEditReview={app.openEditReview}
               onShareProfile={app.openShareProfile}
               onOpenStory={app.openStoryCard}
               onOpenFoundation={() => navigation.navigate('ProductFoundation')}
+              onOpenPrivacy={() => navigation.navigate('PrivacyCenter')}
               onSaveProfile={app.saveProfile}
               onToggleFollow={app.toggleFollowUser}
               onBlockUser={app.blockUser}
@@ -233,7 +320,20 @@ export default function AppNavigator({ app }) {
               followingCount={viewedUser?.followingCount || 0}
               listeningStreak={app.listeningStreak}
               recentListening={[]}
+              achievementSummary={null}
               onOpenReviewWhileListening={app.openReviewWhileListening}
+              interestingUsers={app.interestingUsers}
+              profileCompatibility={app.getCompatibilityForHandle(
+                route.params.userHandle
+              )}
+              onViewSuggestedProfile={(userHandle) => {
+                if (app.isCurrentUserHandle(userHandle)) {
+                  navigation.navigate('MainTabs', { screen: 'ProfileTab' });
+                  return;
+                }
+
+                navigation.replace('UserProfile', { userHandle });
+              }}
               isPublic={true}
             />
           );
@@ -246,6 +346,13 @@ export default function AppNavigator({ app }) {
             currentUser={app.currentUser}
             preferences={app.preferences}
             notifications={app.notifications}
+            spotifySession={app.spotifySession}
+            spotifyStatus={app.spotifyStatus}
+            spotifyPlaybackStatus={app.spotifyPlaybackStatus}
+            musicOracleStatus={app.musicOracleStatus}
+            achievementSummary={app.achievementSummary}
+            pushSupportStatus={app.pushSupportStatus}
+            pushPermissionStatus={app.pushPermissionStatus}
             onBack={() => navigation.goBack()}
             onResetExperience={() => {
               navigation.goBack();
@@ -256,6 +363,7 @@ export default function AppNavigator({ app }) {
             onOpenSecurity={() => navigation.navigate('SecurityCenter')}
             onOpenLegal={() => navigation.navigate('LegalCenter')}
             onOpenPlans={() => navigation.navigate('Plans')}
+            onConnectSpotify={app.connectSpotifyAccount}
           />
         )}
       </RootStack.Screen>
@@ -282,6 +390,16 @@ export default function AppNavigator({ app }) {
       <RootStack.Screen name="SecurityCenter">
         {({ navigation }) => (
           <SecurityCenterScreen
+            preferences={app.preferences}
+            onBack={() => navigation.goBack()}
+            onUpdatePreferences={app.updatePreferences}
+          />
+        )}
+      </RootStack.Screen>
+
+      <RootStack.Screen name="PrivacyCenter">
+        {({ navigation }) => (
+          <PrivacyCenterScreen
             preferences={app.preferences}
             onBack={() => navigation.goBack()}
             onUpdatePreferences={app.updatePreferences}

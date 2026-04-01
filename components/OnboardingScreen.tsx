@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,54 +11,65 @@ import { ArrowRight, Disc3, Shield, Sparkles } from 'lucide-react-native';
 
 const OnboardingScreen = ({ onContinue }) => {
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}>
       <View style={styles.glow} />
 
       <View style={styles.header}>
         <View style={styles.badge}>
           <Disc3 color="#E9D5FF" size={18} />
-          <Text style={styles.badgeText}>B-SIDE PREVIEW</Text>
+          <Text style={styles.badgeText}>B-SIDE</Text>
         </View>
-        <Text style={styles.title}>Tu rincon para descubrir y guardar discos</Text>
+        <Text style={styles.title}>
+          Descubrí, guardá y compartí música a tu manera
+        </Text>
         <Text style={styles.subtitle}>
-          Esta version ya tiene feed, busqueda, listas, perfiles, likes,
-          comentarios, notificaciones, follow, bloqueo, reportes y chat mock.
-          Auth real, legal y monetizacion quedan preparados para la siguiente
-          etapa.
+          Encontrá discos, armá tus listas, dejá reseñas y conectá con gente
+          que vibra con la música como vos.
         </Text>
       </View>
 
       <View style={styles.previewCard}>
-        <Image
-          source={{ uri: 'https://i.postimg.cc/85M3p6Xn/vinilo-violeta.png' }}
-          style={styles.previewImage}
-        />
+        <View style={styles.previewVisual}>
+          <View style={styles.visualGlow} />
+          <View style={styles.visualRecordOuter}>
+            <View style={styles.visualRecordMiddle}>
+              <View style={styles.visualRecordInner}>
+                <Disc3 color="#F3E8FF" size={28} />
+              </View>
+            </View>
+          </View>
+        </View>
 
         <View style={styles.pointRow}>
           <Sparkles color="#A855F7" size={18} />
           <Text style={styles.pointText}>
-            Explora como invitado y personaliza tu foto y fondo desde perfil.
+            Guardá discos para escuchar después y armá listas con tu propio
+            criterio.
           </Text>
         </View>
         <View style={styles.pointRow}>
           <Shield color="#A855F7" size={18} />
           <Text style={styles.pointText}>
-            La estructura ya esta lista para sumar auth, terminos y seguridad.
+            Personalizá tu perfil, compartí reseñas y descubrí artistas desde
+            una comunidad hecha para melómanos.
           </Text>
         </View>
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={onContinue}>
-        <Text style={styles.primaryText}>Entrar a la demo</Text>
+        <Text style={styles.primaryText}>Entrar</Text>
         <ArrowRight color="white" size={18} />
       </TouchableOpacity>
 
       <Pressable style={styles.footnote} onPress={onContinue}>
         <Text style={styles.footnoteText}>
-          Cuando quieras, esto se puede reemplazar por onboarding real y login.
+          Tu lado B también merece un lugar propio.
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 };
 
@@ -66,10 +77,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#050816',
+  },
+  content: {
     paddingHorizontal: 24,
     paddingTop: 70,
-    paddingBottom: 30,
+    paddingBottom: 44,
     justifyContent: 'space-between',
+    gap: 26,
   },
   glow: {
     position: 'absolute',
@@ -120,10 +134,54 @@ const styles = StyleSheet.create({
     padding: 22,
     gap: 18,
   },
-  previewImage: {
-    width: 96,
-    height: 96,
+  previewVisual: {
     alignSelf: 'center',
+    width: 150,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  visualGlow: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+  },
+  visualRecordOuter: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    backgroundColor: '#090C14',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.36)',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    alignItems: 'center',
+    shadowColor: '#8A2BE2',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+  visualRecordMiddle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 181, 253, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  visualRecordInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#8A2BE2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pointRow: {
     flexDirection: 'row',

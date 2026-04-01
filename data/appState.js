@@ -119,12 +119,19 @@ export const DEFAULT_PREFERENCES = {
   hasCompletedOnboarding: false,
   sessionMode: 'guest',
   notificationsEnabled: true,
+  streakAlertsEnabled: true,
   analyticsEnabled: false,
   contentReportsEnabled: true,
   sessionTimeoutEnabled: false,
   loginAlertsEnabled: true,
   blockedUsersEnabled: true,
   profileModerationEnabled: true,
+  privateListsByDefault: true,
+  showSuggestedProfiles: true,
+  showTasteCompatibility: true,
+  showRecentActivity: true,
+  showListeningStatus: true,
+  allowDirectMessages: true,
 };
 
 const PUBLIC_TOP_ALBUMS = {
@@ -256,7 +263,7 @@ export const MOCK_USERS = {
     id: 'user-coni',
     name: 'Coni',
     handle: 'coni_music',
-    bio: 'Pop, R&B y resenas que pegan primero en la melodia.',
+    bio: 'Pop, R&B y reseñas que pegan primero en la melodía.',
     avatarUrl: '',
     avatarColor: '#F472B6',
     themePreset: 'rose-bootleg',
@@ -316,6 +323,8 @@ export const normalizeReview = (review = {}) => ({
   albumId: review?.albumId || review?.albumTitle || createId('album'),
   albumTitle: review?.albumTitle || 'Album',
   artist: review?.artist || '',
+  artistId: review?.artistId || '',
+  artistUrl: review?.artistUrl || '',
   rating: Number.isFinite(review?.rating) ? review.rating : 0,
   text: review?.text || '',
   cover: review?.cover || '',
@@ -389,6 +398,8 @@ export const normalizeListeningEntry = (entry = {}) => ({
   albumId: entry?.albumId || entry?.id || createId('album'),
   title: entry?.title || entry?.albumTitle || 'Album',
   artist: entry?.artist || '',
+  artistId: entry?.artistId || '',
+  artistUrl: entry?.artistUrl || '',
   cover: entry?.cover || '',
   previewUrl: entry?.previewUrl || '',
   source: entry?.source || 'manual',
@@ -452,20 +463,32 @@ export const normalizeChat = (chat = {}) => {
   return {
     id: chat?.id || createId('chat'),
     user: fallbackUser,
+    themeColor: chat?.themeColor || '#000000',
     unread: Number.isFinite(chat?.unread) ? chat.unread : 0,
     messages: Array.isArray(chat?.messages)
       ? chat.messages.map((message) => ({
           id: message?.id || createId('message'),
+          backendId: message?.backendId || null,
           text: message?.text || '',
           sender: message?.sender === 'them' ? 'them' : 'me',
           time: message?.time || '',
+          createdAt: message?.createdAt || toIsoDate(),
+          messageType: message?.messageType || 'text',
+          albumId: message?.albumId || null,
           albumCover: message?.albumCover,
           albumTitle: message?.albumTitle,
           albumArtist: message?.albumArtist,
+          previewUrl: message?.previewUrl || '',
+          recommendationNote: message?.recommendationNote || '',
+          recommendationReason: message?.recommendationReason || '',
+          ctaLabel: message?.ctaLabel || '',
         }))
       : [],
   };
 };
+
+export const normalizeWishlist = (wishlist = []) =>
+  Array.isArray(wishlist) ? wishlist.map((item) => createListEntry(item)) : [];
 
 export const createInitialChats = () => [
   normalizeChat({
@@ -478,18 +501,21 @@ export const createInitialChats = () => [
         text: 'Che, escuchaste lo nuevo?',
         sender: 'them',
         time: '12:28',
+        createdAt: createRelativeIso({ minutes: 6 }),
       },
       {
         id: 'message-2',
         text: 'Si, zafa. La produccion esta buena.',
         sender: 'me',
         time: '12:29',
+        createdAt: createRelativeIso({ minutes: 5 }),
       },
       {
         id: 'message-3',
         text: 'El track 4 es una locura.',
         sender: 'them',
         time: '12:30',
+        createdAt: createRelativeIso({ minutes: 4 }),
       },
     ],
   }),
@@ -503,6 +529,7 @@ export const createInitialChats = () => [
         text: 'Ese disco es malisimo jajaja',
         sender: 'them',
         time: 'Ayer',
+        createdAt: createRelativeIso({ days: 1, minutes: 4 }),
       },
     ],
   }),
@@ -574,6 +601,7 @@ export const createInitialReports = () => [];
 export const createInitialState = () => ({
   currentUser: normalizeUser(DEFAULT_CURRENT_USER),
   lists: createInitialLists(),
+  wishlist: [],
   reviews: createInitialReviews(),
   listeningHistory: createInitialListeningHistory(),
   top5: [],

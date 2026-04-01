@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   FlatList,
   Image,
@@ -11,12 +11,15 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronLeft,
+  ExternalLink,
   Globe2,
   Lock,
   Play,
+  Radio,
   Shuffle,
   Trash2,
 } from 'lucide-react-native';
+import { getPlaybackState } from '../lib/musicCatalog';
 
 const ListDetailScreen = ({
   list,
@@ -27,6 +30,9 @@ const ListDetailScreen = ({
   onRemoveItem,
   onShuffleList,
   onToggleVisibility,
+  onExportToSpotify,
+  isSpotifyConnected,
+  isSpotifyExportBusy,
 }) => {
   if (!list) return null;
 
@@ -52,6 +58,13 @@ const ListDetailScreen = ({
     onUpdateListOrder(list.id, nextItems);
   };
 
+  const preferredPlaybackItem =
+    list.items.find((item) => item.previewUrl) ||
+    list.items.find((item) => item.externalUrl) ||
+    list.items[0] ||
+    null;
+  const preferredPlaybackState = getPlaybackState(preferredPlaybackItem || {});
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -66,38 +79,73 @@ const ListDetailScreen = ({
         </View>
         <Text style={styles.listName}>{list.name}</Text>
         <Text style={styles.listCount}>
-          {list.items.length} {list.items.length === 1 ? 'cancion' : 'canciones'}
+          {list.items.length} {list.items.length === 1 ? 'disco' : 'discos'}
         </Text>
 
-        <View
-          style={[
-            styles.visibilityBadge,
-            list.isPublic ? styles.visibilityBadgePublic : styles.visibilityBadgePrivate,
-          ]}>
-          {list.isPublic ? (
-            <Globe2 color="#86EFAC" size={14} />
-          ) : (
-            <Lock color="#FDE68A" size={14} />
-          )}
-          <Text style={styles.visibilityBadgeText}>
-            {list.isPublic ? 'Lista publica' : 'Lista privada'}
-          </Text>
-        </View>
+        {list.isSystem ? (
+          <View style={[styles.visibilityBadge, styles.systemBadge]}>
+            <Lock color="#C4B5FD" size={14} />
+            <Text style={styles.visibilityBadgeText}>Solo para vos</Text>
+          </View>
+        ) : (
+          <>
+            <View
+              style={[
+                styles.visibilityBadge,
+                list.isPublic
+                  ? styles.visibilityBadgePublic
+                  : styles.visibilityBadgePrivate,
+              ]}>
+              {list.isPublic ? (
+                <Globe2 color="#86EFAC" size={14} />
+              ) : (
+                <Lock color="#FDE68A" size={14} />
+              )}
+              <Text style={styles.visibilityBadgeText}>
+                {list.isPublic ? 'Lista pública' : 'Lista privada'}
+              </Text>
+            </View>
 
-        <TouchableOpacity
-          style={styles.visibilityButton}
-          onPress={() => onToggleVisibility?.(list.id)}>
-          <Text style={styles.visibilityButtonText}>
-            {list.isPublic ? 'Pasar a privada' : 'Hacer publica'}
-          </Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.visibilityButton}
+              onPress={() => onToggleVisibility?.(list.id)}>
+              <Text style={styles.visibilityButtonText}>
+                {list.isPublic ? 'Pasar a privada' : 'Hacer pública'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <View style={styles.actionButtons}>
           <TouchableOpacity
-            style={styles.playBtn}
-            onPress={() => list.items.length > 0 && onPlaySong(list.items[0])}>
-            <Play color="black" fill="black" size={20} />
-            <Text style={styles.playText}>Reproducir</Text>
+            style={[
+              styles.playBtn,
+              !preferredPlaybackState.canInteract && styles.playBtnDisabled,
+              preferredPlaybackState.mode === 'external' && styles.playBtnExternal,
+            ]}
+            disabled={!preferredPlaybackState.canInteract}
+            onPress={() => preferredPlaybackItem && onPlaySong(preferredPlaybackItem)}>
+            {preferredPlaybackState.mode === 'external' ? (
+              <ExternalLink color="white" size={18} />
+            ) : (
+              <Play
+                color={preferredPlaybackState.canInteract ? 'black' : '#94A3B8'}
+                fill={preferredPlaybackState.mode === 'preview' ? 'black' : 'transparent'}
+                size={20}
+              />
+            )}
+            <Text
+              style={[
+                styles.playText,
+                preferredPlaybackState.mode === 'external' && styles.playTextExternal,
+                !preferredPlaybackState.canInteract && styles.playTextDisabled,
+              ]}>
+              {preferredPlaybackState.mode === 'preview'
+                ? 'Reproducir'
+                : preferredPlaybackState.mode === 'external'
+                  ? 'Abrir'
+                  : 'Sin audio'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -110,15 +158,36 @@ const ListDetailScreen = ({
             <Shuffle color="white" size={20} />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={[
+            styles.spotifyExportBtn,
+            (!list.items.length || isSpotifyExportBusy) && styles.spotifyExportBtnDisabled,
+          ]}
+          disabled={!list.items.length || isSpotifyExportBusy}
+          onPress={() => onExportToSpotify?.(list.id)}>
+          {isSpotifyConnected ? (
+            <ExternalLink color="#E9D5FF" size={18} />
+          ) : (
+            <Radio color="#E9D5FF" size={18} />
+          )}
+          <Text style={styles.spotifyExportText}>
+            {isSpotifyExportBusy
+              ? 'Creando playlist...'
+              : isSpotifyConnected
+                ? 'Llevar a Spotify'
+                : 'Vincular Spotify'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {list.items.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Tu lista esta vacia.</Text>
+          <Text style={styles.emptyText}>Tu lista está vacía.</Text>
           <TouchableOpacity
             style={styles.exploreBtn}
             onPress={onNavigateToSearch}>
-            <Text style={styles.exploreText}>Explorar musica</Text>
+            <Text style={styles.exploreText}>Explorar música</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -127,10 +196,17 @@ const ListDetailScreen = ({
           keyExtractor={(item, index) => item.entryId || `${item.id}-${index}`}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item, index }) => (
+          renderItem={({ item, index }) => {
+            const itemPlaybackState = getPlaybackState(item);
+
+            return (
             <TouchableOpacity
-              style={styles.trackItem}
-              activeOpacity={0.92}
+              style={[
+                styles.trackItem,
+                !itemPlaybackState.canInteract && styles.trackItemDisabled,
+              ]}
+              activeOpacity={itemPlaybackState.canInteract ? 0.92 : 1}
+              disabled={!itemPlaybackState.canInteract}
               onPress={() => onPlaySong(item)}>
               <Text style={styles.trackIndex}>{index + 1}</Text>
 
@@ -142,6 +218,9 @@ const ListDetailScreen = ({
                 </Text>
                 <Text style={styles.trackArtist} numberOfLines={1}>
                   {item.artist}
+                </Text>
+                <Text style={styles.trackPlaybackLabel} numberOfLines={1}>
+                  {itemPlaybackState.badge}
                 </Text>
               </View>
 
@@ -166,7 +245,8 @@ const ListDetailScreen = ({
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
-          )}
+            );
+          }}
         />
       )}
     </View>
@@ -222,6 +302,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(234,179,8,0.12)',
     borderColor: 'rgba(234,179,8,0.24)',
   },
+  systemBadge: {
+    backgroundColor: 'rgba(168,85,247,0.12)',
+    borderColor: 'rgba(168,85,247,0.24)',
+  },
   visibilityBadgeText: { color: '#E5E7EB', fontWeight: '800', fontSize: 13 },
   visibilityButton: {
     marginTop: 12,
@@ -242,7 +326,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  playBtnDisabled: {
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  playBtnExternal: {
+    backgroundColor: '#8A2BE2',
+    borderWidth: 1,
+    borderColor: 'rgba(233,213,255,0.22)',
+  },
   playText: { color: 'black', fontWeight: 'bold', fontSize: 16 },
+  playTextExternal: { color: 'white' },
+  playTextDisabled: { color: '#94A3B8' },
   shuffleBtn: {
     backgroundColor: '#1F2937',
     padding: 12,
@@ -252,6 +348,26 @@ const styles = StyleSheet.create({
   },
   shuffleBtnDisabled: {
     opacity: 0.45,
+  },
+  spotifyExportBtn: {
+    marginTop: 14,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.24)',
+    backgroundColor: 'rgba(88,28,135,0.18)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  spotifyExportBtnDisabled: {
+    opacity: 0.45,
+  },
+  spotifyExportText: {
+    color: '#F5E8FF',
+    fontWeight: '800',
+    fontSize: 13,
   },
   emptyContainer: {
     flex: 1,
@@ -280,6 +396,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
+  trackItemDisabled: {
+    opacity: 0.58,
+  },
   trackIndex: {
     color: '#94A3B8',
     fontSize: 16,
@@ -292,6 +411,12 @@ const styles = StyleSheet.create({
   trackInfo: { flex: 1, justifyContent: 'center' },
   trackTitle: { color: 'white', fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
   trackArtist: { color: '#A855F7', fontSize: 14 },
+  trackPlaybackLabel: {
+    color: '#CBD5E1',
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '700',
+  },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 10 },
   controlBtn: { padding: 5 },
   deleteBtn: {
@@ -303,3 +428,4 @@ const styles = StyleSheet.create({
 });
 
 export default ListDetailScreen;
+

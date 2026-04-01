@@ -15,14 +15,45 @@ import { buildProfileTheme } from '../data/appState';
 
 const { width, height } = Dimensions.get('window');
 
-const ShareStoryCard = ({ visible, onClose, albums, username, user }) => {
+const StoryAlbumTile = ({ album, rank, compact = false }) => {
+  const shellStyle = compact ? styles.compactTileShell : styles.largeTileShell;
+  const imageStyle = compact ? styles.compactImage : styles.largeImage;
+
+  return (
+    <View style={[styles.tileShell, shellStyle]}>
+      <View style={styles.rankBadge}>
+        <Text style={styles.rankText}>#{rank}</Text>
+      </View>
+
+      {album?.cover ? (
+        <Image source={{ uri: album.cover }} style={imageStyle} />
+      ) : (
+        <View style={[styles.placeholderTile, imageStyle]}>
+          <Disc color="#C4B5FD" size={compact ? 20 : 24} />
+        </View>
+      )}
+
+      <View style={styles.tileCopy}>
+        <Text style={styles.tileTitle} numberOfLines={1}>
+          {album?.title || 'Tu pr\u00f3ximo fijo'}
+        </Text>
+        <Text style={styles.tileArtist} numberOfLines={1}>
+          {album?.artist || 'Eleg\u00ed un disco'}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
   if (!visible) return null;
 
   const theme = buildProfileTheme(user);
-  const safeAlbums =
-    albums.length > 0
-      ? [...albums, ...albums, ...albums, ...albums].slice(0, 4)
-      : [null, null, null, null];
+  const topFive = [...albums.slice(0, 5)];
+
+  while (topFive.length < 5) {
+    topFive.push(null);
+  }
 
   return (
     <Modal animationType="fade" transparent={true} visible={visible}>
@@ -41,6 +72,7 @@ const ShareStoryCard = ({ visible, onClose, albums, username, user }) => {
               resizeMode="cover"
             />
           ) : null}
+
           <View
             style={[
               StyleSheet.absoluteFill,
@@ -51,32 +83,47 @@ const ShareStoryCard = ({ visible, onClose, albums, username, user }) => {
           <View
             style={[
               styles.logoContainer,
-              { backgroundColor: `${theme.accent}22`, borderColor: `${theme.accent}55` },
+              {
+                backgroundColor: `${theme.accent}22`,
+                borderColor: `${theme.accent}55`,
+              },
             ]}>
-            <Disc color="#F3E8FF" size={34} />
+            <Disc color="#F3E8FF" size={22} />
             <Text style={styles.appName}>B-SIDE</Text>
           </View>
 
+          <View style={styles.headerBlock}>
+            <Text style={styles.eyebrow}>TU TOP 5 HIST\u00d3RICO</Text>
+            <Text style={styles.title}>MI LADO B</Text>
+            <Text style={[styles.handle, { color: theme.accent }]}>@{username}</Text>
+          </View>
+
           <View style={styles.gridContainer}>
-            <View style={styles.row}>
-              <AlbumTile album={safeAlbums[0]} />
-              <View style={styles.gridGap} />
-              <AlbumTile album={safeAlbums[1]} />
+            <View style={styles.topRow}>
+              {topFive.slice(0, 3).map((album, index) => (
+                <StoryAlbumTile
+                  key={`top-${index}`}
+                  album={album}
+                  rank={index + 1}
+                  compact
+                />
+              ))}
             </View>
-            <View style={styles.gridGap} />
-            <View style={styles.row}>
-              <AlbumTile album={safeAlbums[2]} />
-              <View style={styles.gridGap} />
-              <AlbumTile album={safeAlbums[3]} />
+
+            <View style={styles.bottomRow}>
+              {topFive.slice(3, 5).map((album, index) => (
+                <StoryAlbumTile
+                  key={`bottom-${index}`}
+                  album={album}
+                  rank={index + 4}
+                />
+              ))}
             </View>
           </View>
 
-          <View style={styles.footerText}>
-            <Text style={styles.title}>MI LADO B</Text>
-            <Text style={[styles.handle, { color: theme.accent }]}>
-              @{username}
-            </Text>
-          </View>
+          <Text style={styles.caption}>
+            Cinco discos para contar de d\u00f3nde viene tu gusto.
+          </Text>
         </LinearGradient>
 
         <View style={styles.actionsRow}>
@@ -99,26 +146,20 @@ const ShareStoryCard = ({ visible, onClose, albums, username, user }) => {
   );
 };
 
-const AlbumTile = ({ album }) => {
-  if (!album?.cover) {
-    return (
-      <View style={styles.placeholderTile}>
-        <Disc color="#C4B5FD" size={22} />
-      </View>
-    );
-  }
-
-  return <Image source={{ uri: album.cover }} style={styles.img} />;
-};
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.95)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
-  closeArea: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  closeArea: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
   closeBtn: {
     backgroundColor: '#111827',
     borderRadius: 20,
@@ -127,23 +168,29 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   card: {
-    width: width * 0.85,
-    height: height * 0.68,
+    width: width * 0.88,
+    maxWidth: 760,
+    minHeight: Math.min(height * 0.82, 760),
     borderRadius: 35,
-    padding: 25,
+    paddingVertical: 28,
+    paddingHorizontal: 26,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
+    gap: 22,
   },
   wallpaper: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.35,
+    opacity: 0.3,
   },
   logoContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
+    gap: 10,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 999,
     borderWidth: 1,
@@ -151,48 +198,113 @@ const styles = StyleSheet.create({
   appName: {
     color: 'white',
     fontWeight: '900',
-    fontSize: 20,
-    marginTop: 8,
+    fontSize: 18,
     letterSpacing: 3,
+  },
+  headerBlock: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  eyebrow: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+  },
+  title: {
+    color: 'white',
+    fontWeight: '900',
+    fontSize: 30,
+    fontStyle: 'italic',
+    letterSpacing: -1,
+  },
+  handle: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   gridContainer: {
     width: '100%',
-    alignItems: 'center',
+    gap: 22,
+  },
+  topRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  bottomRow: {
+    width: '100%',
+    flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'flex-start',
+    gap: 16,
   },
-  row: { flexDirection: 'row' },
-  gridGap: {
-    width: 15,
-    height: 15,
+  tileShell: {
+    alignItems: 'center',
+    gap: 10,
   },
-  img: {
-    width: 125,
-    height: 125,
-    borderRadius: 16,
-    backgroundColor: '#000',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+  compactTileShell: {
+    width: '31.5%',
+  },
+  largeTileShell: {
+    width: '41%',
+  },
+  compactImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 18,
+    backgroundColor: '#080B14',
+  },
+  largeImage: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 22,
+    backgroundColor: '#080B14',
   },
   placeholderTile: {
-    width: 125,
-    height: 125,
-    borderRadius: 16,
-    backgroundColor: 'rgba(15,23,42,0.7)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(10, 14, 24, 0.82)',
   },
-  footerText: { alignItems: 'center', marginBottom: 10 },
-  title: {
-    color: 'white',
+  rankBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(7,10,18,0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  rankText: {
+    color: '#E9D5FF',
+    fontSize: 11,
     fontWeight: '900',
-    fontSize: 28,
-    fontStyle: 'italic',
-    marginBottom: 5,
-    letterSpacing: -1,
   },
-  handle: { fontSize: 16, fontWeight: '800' },
+  tileCopy: {
+    alignItems: 'center',
+    gap: 4,
+    width: '100%',
+  },
+  tileTitle: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 13,
+    textAlign: 'center',
+    width: '100%',
+  },
+  tileArtist: {
+    color: '#C4B5FD',
+    fontSize: 12,
+    textAlign: 'center',
+    width: '100%',
+  },
+  caption: {
+    color: '#E5E7EB',
+    textAlign: 'center',
+    fontSize: 14,
+    marginTop: 'auto',
+  },
   actionsRow: {
     flexDirection: 'row',
     gap: 25,

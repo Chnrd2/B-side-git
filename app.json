@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#050816"
     },
     "ios": {
       "supportsTablet": true
@@ -18,13 +18,16 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#050816"
       },
       "edgeToEdgeEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "description": "Red social musical para descubrir discos, reseñarlos y guardarlos en listas."
+    "plugins": [
+      "expo-notifications"
+    ],
+    "description": "Red social musical para descubrir discos, resenarlos y guardarlos en listas."
   }
 }

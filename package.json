@@ -10,7 +10,8 @@
     "web:19006": "expo start --web --port 19006",
     "doctor": "cmd /c \"if exist .expo rd /s /q .expo & npx expo-doctor\"",
     "env:init": "node scripts/init-env.cjs",
-    "supabase:check": "node scripts/check-supabase-env.cjs"
+    "supabase:check": "node scripts/check-supabase-env.cjs",
+    "spotify:check": "node scripts/check-spotify-env.cjs"
   },
   "dependencies": {
     "@miblanchard/react-native-slider": "*",
@@ -22,8 +23,11 @@
     "@types/react": "~19.1.10",
     "expo": "~54.0.33",
     "expo-av": "~16.0.8",
+    "expo-constants": "~18.0.13",
+    "expo-device": "~8.0.10",
     "expo-image-picker": "~17.0.10",
     "expo-linear-gradient": "~15.0.8",
+    "expo-notifications": "~0.32.16",
     "lucide-react-native": "*",
     "react": "19.1.0",
     "react-dom": "19.1.0",

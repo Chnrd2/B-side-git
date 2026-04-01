@@ -11,16 +11,22 @@ import {
 } from 'react-native';
 import { Plus, X } from 'lucide-react-native';
 
-const CreateListModal = ({ visible, onClose, onSubmit }) => {
+const CreateListModal = ({ visible, onClose, onSubmit, defaultIsPublic = false }) => {
   const [name, setName] = useState('');
   const [isPublic, setIsPublic] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setName('');
-      setIsPublic(false);
+      setIsPublic(defaultIsPublic);
     }
-  }, [visible]);
+  }, [defaultIsPublic, visible]);
+
+  useEffect(() => {
+    if (visible) {
+      setIsPublic(defaultIsPublic);
+    }
+  }, [defaultIsPublic, visible]);
 
   const handleSubmit = () => {
     const trimmedName = name.trim();
@@ -32,7 +38,7 @@ const CreateListModal = ({ visible, onClose, onSubmit }) => {
       isPublic,
     });
     setName('');
-    setIsPublic(false);
+    setIsPublic(defaultIsPublic);
   };
 
   return (
@@ -96,10 +102,10 @@ const CreateListModal = ({ visible, onClose, onSubmit }) => {
                   styles.visibilityTitle,
                   isPublic && styles.visibilityTitleActive,
                 ]}>
-                Publica
+                Pública
               </Text>
               <Text style={styles.visibilityText}>
-                Lista lista para mostrar.
+                Ideal para compartirla.
               </Text>
             </TouchableOpacity>
           </View>

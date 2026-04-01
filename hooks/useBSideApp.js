@@ -1,5 +1,5 @@
-import { Alert, Animated, Platform } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+﻿import { Alert, Animated, Linking, Platform } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   CURRENT_USER_HANDLE,
@@ -24,9 +24,35 @@ import {
   shouldUploadProfileAsset,
   uploadProfileAsset,
 } from '../lib/profileAssets';
+import { resolveAlbumPlayback } from '../lib/musicCatalog';
+import {
+  cancelStreakWarning,
+  getPushSupportStatus,
+  registerForPushNotifications,
+  scheduleStreakWarning,
+  sendLocalNotification,
+} from '../lib/pushNotifications';
+import {
+  getMusicOracleRecommendations,
+  getMusicOracleStatus,
+} from '../lib/musicOracle';
+import { buildAchievementSummary } from '../lib/profileProgress';
+import {
+  completeSpotifyConnectFromUrl,
+  consumePendingSpotifyExportList,
+  disconnectSpotifyUser,
+  exportListToSpotifyPlaylist,
+  fetchSpotifyCurrentUser,
+  getSpotifyFullPlaybackStatus,
+  getSpotifyUserSession,
+  setPendingSpotifyExportList,
+  getSpotifyUserStatus,
+  startSpotifyConnect,
+} from '../lib/spotifyUser';
 import { loadAppState, saveAppState } from '../lib/storage';
 import {
   createBackendNotification,
+  createMessageRecord,
   getAuthenticatedProfileSnapshot,
   createListRecord,
   createListeningEventRecord,
@@ -36,12 +62,14 @@ import {
   fetchBackendNotifications,
   fetchCommunityFeedReviews,
   fetchCommunityProfiles,
+  fetchCurrentUserChats,
   fetchCurrentUserListeningHistory,
   fetchSocialSnapshot,
   fetchCurrentUserLists,
   fetchCurrentUserReviews,
   followProfileByHandle,
   getSupabaseStatus,
+  markConversationMessagesAsRead,
   markBackendNotificationsAsRead,
   blockProfileByHandle,
   registerWithEmail,
@@ -57,6 +85,7 @@ import {
   upsertProfile,
   deleteReviewRecord,
   toggleReviewLikeRecord,
+  subscribeToUserMessages,
   subscribeToUserNotifications,
 } from '../lib/supabase';
 
@@ -106,6 +135,62 @@ const mergeListeningCollections = (...collections) => {
     .slice(0, 80);
 };
 
+const getChatHandleKey = (chat = {}) =>
+  normalizeHandle(chat?.user?.handle || '');
+
+const mergeChatCollections = (...collections) => {
+  const chatMap = new Map();
+
+  collections.flat().forEach((chat) => {
+    const chatKey = getChatHandleKey(chat);
+
+    if (!chatKey) {
+      return;
+    }
+
+    const existingChat = chatMap.get(chatKey);
+
+    if (!existingChat) {
+      chatMap.set(chatKey, {
+        ...chat,
+        messages: [...(chat.messages || [])],
+      });
+      return;
+    }
+
+    const messageMap = new Map();
+
+    [...existingChat.messages, ...(chat.messages || [])].forEach((message) => {
+      const messageKey =
+        message.backendId ||
+        message.id ||
+        `${message.sender}:${message.createdAt || message.time}:${message.text}`;
+      messageMap.set(messageKey, message);
+    });
+
+    chatMap.set(chatKey, {
+      ...existingChat,
+      ...chat,
+      unread: Math.max(existingChat.unread || 0, chat.unread || 0),
+      messages: Array.from(messageMap.values()).sort(
+        (left, right) =>
+          getTimestampValue(left.createdAt) - getTimestampValue(right.createdAt)
+      ),
+    });
+  });
+
+  return Array.from(chatMap.values()).sort((left, right) => {
+    const leftTime = getTimestampValue(
+      left.messages[left.messages.length - 1]?.createdAt
+    );
+    const rightTime = getTimestampValue(
+      right.messages[right.messages.length - 1]?.createdAt
+    );
+
+    return rightTime - leftTime;
+  });
+};
+
 const getTimeLabel = () =>
   new Date().toLocaleTimeString([], {
     hour: '2-digit',
@@ -138,6 +223,41 @@ const getDateFromDayKey = (dayKey = '') => {
 const createAlbumKey = (title = '', artist = '') =>
   `${title}`.trim().toLowerCase() + `::${artist}`.trim().toLowerCase();
 
+const createArtistKey = (artist = '') => `${artist}`.trim().toLowerCase();
+
+const shuffleCollection = (items = []) =>
+  [...items].sort(() => Math.random() - 0.5);
+
+const buildAlbumReference = (album = {}) => ({
+  albumId: `${album?.albumId || album?.id || ''}`.trim(),
+  albumKey: createAlbumKey(
+    album?.title || album?.albumTitle,
+    album?.artist || album?.artistName
+  ),
+});
+
+const matchesAlbumReference = (candidate = {}, reference = {}) => {
+  const candidateAlbumId = `${candidate?.albumId || candidate?.id || ''}`.trim();
+
+  if (reference.albumId && candidateAlbumId && candidateAlbumId === reference.albumId) {
+    return true;
+  }
+
+  return (
+    createAlbumKey(
+      candidate?.title || candidate?.albumTitle,
+      candidate?.artist || candidate?.artistName
+    ) === reference.albumKey
+  );
+};
+
+const mergePlayableTrackData = (item = {}, playableTrack = {}) => ({
+  ...item,
+  previewUrl: item?.previewUrl || playableTrack?.previewUrl || '',
+  externalUrl: item?.externalUrl || playableTrack?.externalUrl || '',
+  source: item?.source || playableTrack?.source || '',
+});
+
 const buildListeningStreakSummary = (history = []) => {
   const sortedHistory = [...history].sort(
     (left, right) =>
@@ -153,6 +273,10 @@ const buildListeningStreakSummary = (history = []) => {
   let current = 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const todayKey = getLocalDayKey(today);
+  const yesterdayKey = getLocalDayKey(yesterday);
 
   while (true) {
     const cursor = new Date(today);
@@ -192,6 +316,9 @@ const buildListeningStreakSummary = (history = []) => {
     longest,
     totalDays: uniqueDayKeys.length,
     totalPlays: history.length,
+    hasPlayedToday: daySet.has(todayKey),
+    hasPlayedYesterday: daySet.has(yesterdayKey),
+    isAtRisk: !daySet.has(todayKey) && daySet.has(yesterdayKey),
     last7DaysCount: sortedHistory.filter(
       (entry) => Date.now() - getTimestampValue(entry.createdAt) <= 7 * 86400000
     ).length,
@@ -234,12 +361,69 @@ const buildReviewFeedScore = (
   );
 };
 
+const buildCompatibilitySummary = ({
+  user,
+  userReviews = [],
+  ownTasteAlbumKeys,
+  ownTasteArtistKeys,
+}) => {
+  const overlapArtists = [
+    ...new Set(
+      userReviews
+        .map((review) => `${review.artist || ''}`.trim().toLowerCase())
+        .filter((artist) => ownTasteArtistKeys.has(artist))
+    ),
+  ];
+  const overlapAlbums = [
+    ...new Set(
+      [...(user?.top5 || []), ...userReviews]
+        .map((album) =>
+          createAlbumKey(
+            album.title || album.albumTitle,
+            album.artist || album.artistName
+          )
+        )
+        .filter((albumKey) => ownTasteAlbumKeys.has(albumKey))
+    ),
+  ];
+  const reviewVelocity = Math.min(14, userReviews.length * 2);
+  const followerBoost = Math.min(10, user?.followersCount || 0);
+  const score =
+    overlapAlbums.length * 18 +
+    overlapArtists.length * 10 +
+    reviewVelocity +
+    followerBoost;
+  const percent = Math.max(
+    18,
+    Math.min(
+      98,
+      30 + overlapAlbums.length * 18 + overlapArtists.length * 10 + reviewVelocity
+    )
+  );
+
+  return {
+    score,
+    percent,
+    overlapAlbums,
+    overlapArtists,
+    reason: overlapAlbums.length
+      ? `Coinciden fuerte en ${overlapAlbums[0].split('::')[0]}`
+      : overlapArtists.length
+        ? `Comparten gusto por ${overlapArtists[0]}`
+        : user?.followersCount
+          ? `${user.followersCount} seguidores en B-Side`
+          : 'Perfil activo para descubrir música',
+  };
+};
+
 export default function useBSideApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [hasStoredSnapshot, setHasStoredSnapshot] = useState(false);
 
   const [currentUser, setCurrentUser] = useState(initialState.currentUser);
   const [reviews, setReviews] = useState(initialState.reviews);
+  const [wishlist, setWishlist] = useState(initialState.wishlist);
   const [listeningHistory, setListeningHistory] = useState(
     initialState.listeningHistory
   );
@@ -262,12 +446,23 @@ export default function useBSideApp() {
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
   const [communityProfiles, setCommunityProfiles] = useState([]);
+  const [spotifySession, setSpotifySession] = useState(null);
+  const [spotifyProfile, setSpotifyProfile] = useState(null);
+  const [isSpotifyExportBusy, setIsSpotifyExportBusy] = useState(false);
+  const [pendingSpotifyExportListId, setPendingSpotifyExportListId] = useState('');
+  const [pushPermissionStatus, setPushPermissionStatus] = useState('unknown');
+  const [oracleRecommendations, setOracleRecommendations] = useState([]);
+  const [isOracleBusy, setIsOracleBusy] = useState(false);
+  const [oracleSource, setOracleSource] = useState('local');
+  const [oracleMessage, setOracleMessage] = useState('');
 
   const [currentTrack, setCurrentTrack] = useState(null);
+  const playbackResolutionCacheRef = useRef(new Map());
   const [listModalAlbum, setListModalAlbum] = useState(null);
   const [isCreateListVisible, setIsCreateListVisible] = useState(false);
   const [isShareVisible, setIsShareVisible] = useState(false);
   const [isStoryVisible, setIsStoryVisible] = useState(false);
+  const [recommendedAlbum, setRecommendedAlbum] = useState(null);
   const [editingReview, setEditingReview] = useState(null);
   const [reviewAlbum, setReviewAlbum] = useState(null);
   const [reviewContext, setReviewContext] = useState(null);
@@ -275,6 +470,13 @@ export default function useBSideApp() {
 
   const fadeAnim = useMemo(() => new Animated.Value(0), []);
   const supabaseStatus = useMemo(() => getSupabaseStatus(), []);
+  const spotifyStatus = useMemo(() => getSpotifyUserStatus(), []);
+  const musicOracleStatus = useMemo(() => getMusicOracleStatus(), []);
+  const pushSupportStatus = useMemo(() => getPushSupportStatus(), []);
+  const spotifyPlaybackStatus = useMemo(
+    () => getSpotifyFullPlaybackStatus(spotifySession, spotifyProfile),
+    [spotifyProfile, spotifySession]
+  );
   const currentUserHandle = normalizeHandle(
     currentUser?.handle || CURRENT_USER_HANDLE
   );
@@ -326,7 +528,16 @@ export default function useBSideApp() {
         (chat) =>
           !preferences.blockedUsersEnabled ||
           !blockedHandles.includes(normalizeHandle(chat?.user?.handle || ''))
-      ),
+      ).sort((left, right) => {
+        const leftTime = getTimestampValue(
+          left.messages[left.messages.length - 1]?.createdAt
+        );
+        const rightTime = getTimestampValue(
+          right.messages[right.messages.length - 1]?.createdAt
+        );
+
+        return rightTime - leftTime;
+      }),
     [blockedHandles, globalChats, preferences.blockedUsersEnabled]
   );
   const socialGraph = useMemo(
@@ -392,6 +603,58 @@ export default function useBSideApp() {
         )
         .slice(0, 6),
     [listeningHistory]
+  );
+  const ownReviews = useMemo(
+    () =>
+      reviews.filter(
+        (review) => normalizeHandle(review.user) === currentUserHandle
+      ),
+    [currentUserHandle, reviews]
+  );
+  const recommendationsSentCount = useMemo(
+    () =>
+      globalChats.reduce(
+        (accumulator, chat) =>
+          accumulator +
+          chat.messages.filter(
+            (message) =>
+              message.sender === 'me' &&
+              message.messageType === 'recommendation'
+          ).length,
+        0
+      ),
+    [globalChats]
+  );
+  const achievementSummary = useMemo(
+    () =>
+      buildAchievementSummary({
+        reviewCount: ownReviews.length,
+        listCount: lists.filter((list) => !list.isSystem).length,
+        streakCurrent: listeningStreak.current,
+        listeningDays: listeningHistory.length,
+        recommendationsSent: recommendationsSentCount,
+      }),
+    [
+      listeningHistory.length,
+      listeningStreak.current,
+      lists,
+      ownReviews.length,
+      recommendationsSentCount,
+    ]
+  );
+  const wishlistList = useMemo(
+    () => ({
+      id: 'wishlist',
+      name: 'Por escuchar',
+      color: '#8A2BE2',
+      isPublic: false,
+      isSystem: true,
+      systemDescription:
+        'Tu cola privada para discos que quieres escuchar con mas tiempo.',
+      items: wishlist,
+      count: wishlist.length,
+    }),
+    [wishlist]
   );
   const ownTasteAlbumKeys = useMemo(() => {
     const albums = [
@@ -510,46 +773,25 @@ export default function useBSideApp() {
           const userReviews = visibleReviews.filter(
             (review) => normalizeHandle(review.user) === normalizedHandle
           );
-          const overlapArtists = [
-            ...new Set(
-              userReviews
-                .map((review) => `${review.artist || ''}`.trim().toLowerCase())
-                .filter((artist) => ownTasteArtistKeys.has(artist))
-            ),
-          ];
-          const overlapAlbums = [
-            ...new Set(
-              [...(user.top5 || []), ...userReviews]
-                .map((album) =>
-                  createAlbumKey(
-                    album.title || album.albumTitle,
-                    album.artist || album.artistName
-                  )
-                )
-                .filter((albumKey) => ownTasteAlbumKeys.has(albumKey))
-            ),
-          ];
+          const compatibility = buildCompatibilitySummary({
+            user,
+            userReviews,
+            ownTasteAlbumKeys,
+            ownTasteArtistKeys,
+          });
           const engagementScore = userReviews.reduce(
             (accumulator, review) =>
               accumulator + review.likedBy.length * 2 + review.comments.length * 3,
             0
           );
-          const score =
-            overlapAlbums.length * 18 +
-            overlapArtists.length * 10 +
-            engagementScore +
-            user.followersCount * 2;
+          const score = compatibility.score + engagementScore + user.followersCount * 2;
 
           return {
             ...user,
             score,
-            reason: overlapAlbums.length
-              ? `Comparte tu onda con ${overlapAlbums[0].split('::')[0]}`
-              : overlapArtists.length
-                ? `Tiene afinidad con ${overlapArtists[0]}`
-                : user.followersCount
-                  ? `${user.followersCount} seguidores en B-Side`
-                  : 'Perfil activo para descubrir musica',
+            reason: compatibility.reason,
+            compatibilityScore: compatibility.percent,
+            compatibilityReason: compatibility.reason,
           };
         })
         .sort((left, right) => right.score - left.score)
@@ -663,6 +905,161 @@ export default function useBSideApp() {
     ownTasteAlbumKeys,
     ownTasteArtistKeys,
   ]);
+  const interestingArtists = useMemo(() => {
+    const artistMap = new Map();
+    const addArtist = (artist = {}, metadata = {}) => {
+      const artistKey = createArtistKey(artist.name || artist.artist);
+
+      if (!artistKey || ownTasteArtistKeys.has(artistKey)) {
+        return;
+      }
+
+      const existingArtist = artistMap.get(artistKey) || {
+        name: artist.name || artist.artist || '',
+        artistId: artist.artistId || '',
+        artistUrl: artist.artistUrl || '',
+        cover: artist.cover || '',
+        source: artist.source || '',
+        anchorAlbumTitle: artist.anchorAlbumTitle || '',
+        score: 0,
+        reasons: [],
+      };
+
+      existingArtist.score += metadata.score || 0;
+      existingArtist.cover = existingArtist.cover || artist.cover || '';
+      existingArtist.artistId = existingArtist.artistId || artist.artistId || '';
+      existingArtist.artistUrl = existingArtist.artistUrl || artist.artistUrl || '';
+      existingArtist.source = existingArtist.source || artist.source || '';
+      existingArtist.anchorAlbumTitle =
+        existingArtist.anchorAlbumTitle || artist.anchorAlbumTitle || '';
+
+      if (metadata.reason) {
+        existingArtist.reasons.push(metadata.reason);
+      }
+
+      artistMap.set(artistKey, existingArtist);
+    };
+
+    feedReviews.forEach((review) => {
+      if (normalizeHandle(review.user) === currentUserHandle) {
+        return;
+      }
+
+      addArtist(
+        {
+          name: review.artist,
+          cover: review.cover,
+          source: review.source,
+          anchorAlbumTitle: review.albumTitle,
+        },
+        {
+          score:
+            review.rating * 7 +
+            review.likedBy.length * 2 +
+            review.comments.length * 3 +
+            (followingSet.has(normalizeHandle(review.user)) ? 16 : 8),
+          reason: followingSet.has(normalizeHandle(review.user))
+            ? `Lo viene empujando ${review.user}`
+            : 'Se esta nombrando bastante en la comunidad',
+        }
+      );
+    });
+
+    interestingAlbums.forEach((album) => {
+      addArtist(
+        {
+          name: album.artist,
+          cover: album.cover,
+          artistId: album.artistId,
+          artistUrl: album.artistUrl,
+          source: album.source,
+          anchorAlbumTitle: album.title,
+        },
+        {
+          score: 10,
+          reason: album.reason,
+        }
+      );
+    });
+
+    return Array.from(artistMap.values())
+      .map((artist) => ({
+        ...artist,
+        reason: artist.reasons[0] || 'Artista recomendado para descubrir',
+      }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 6);
+  }, [
+    currentUserHandle,
+    feedReviews,
+    followingSet,
+    interestingAlbums,
+    ownTasteArtistKeys,
+  ]);
+  const oracleCandidates = useMemo(() => {
+    const candidateMap = new Map();
+
+    interestingAlbums.forEach((album, index) => {
+      candidateMap.set(album.id, {
+        ...album,
+        reason: album.reason,
+        score: album.score || Math.max(0, 24 - index * 2),
+      });
+    });
+
+    feedReviews.forEach((review) => {
+      const albumKey = review.albumId || createAlbumKey(review.albumTitle, review.artist);
+
+      if (!albumKey || ownTasteAlbumKeys.has(createAlbumKey(review.albumTitle, review.artist))) {
+        return;
+      }
+
+      if (candidateMap.has(albumKey)) {
+        return;
+      }
+
+      candidateMap.set(albumKey, {
+        id: albumKey,
+        albumId: review.albumId || albumKey,
+        title: review.albumTitle,
+        artist: review.artist,
+        cover: review.cover,
+        previewUrl: review.previewUrl || '',
+        externalUrl: review.externalUrl || '',
+        source: review.source || '',
+        reason: followingSet.has(normalizeHandle(review.user))
+          ? `Lo viene empujando ${review.user}.`
+          : 'Está apareciendo mucho entre reseñas y actividad reciente.',
+        score: review.rating * 6 + review.comments.length * 2 + review.likedBy.length,
+      });
+    });
+
+    return Array.from(candidateMap.values())
+      .sort((left, right) => (right.score || 0) - (left.score || 0))
+      .slice(0, 12);
+  }, [feedReviews, followingSet, interestingAlbums, ownTasteAlbumKeys]);
+  const oracleTasteProfile = useMemo(
+    () => ({
+      topFive: top5.slice(0, 5).map((album) => ({
+        title: album.title,
+        artist: album.artist,
+      })),
+      favoriteArtists: [
+        ...new Set(
+          [...top5, ...ownReviews]
+            .map((item) => `${item.artist || ''}`.trim())
+            .filter(Boolean)
+        ),
+      ].slice(0, 6),
+      recentReviewMood:
+        ownReviews
+          .slice(0, 3)
+          .map((review) => review.text)
+          .filter(Boolean)
+          .join(' | ') || '',
+    }),
+    [ownReviews, top5]
+  );
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -675,10 +1072,64 @@ export default function useBSideApp() {
   useEffect(() => {
     let isMounted = true;
 
+    const hydrateSpotify = async () => {
+      const callbackResult = await completeSpotifyConnectFromUrl();
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (callbackResult.ok) {
+        pushNotification({
+          type: 'product',
+          title: 'Spotify conectado',
+          body: 'Tu cuenta ya quedo lista para exportar listas desde B-Side.',
+          read: true,
+        });
+      } else if (callbackResult.message) {
+        setAuthMessage(callbackResult.message);
+      }
+
+      const sessionResult = await refreshSpotifyConnection();
+
+      if (isMounted && !sessionResult.ok && sessionResult.message) {
+        setAuthMessage(sessionResult.message);
+      }
+
+      if (isMounted && callbackResult.ok) {
+        const pendingListId = await consumePendingSpotifyExportList();
+
+        if (pendingListId) {
+          setPendingSpotifyExportListId(pendingListId);
+        }
+      }
+    };
+
+    void hydrateSpotify();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated || !spotifySession?.accessToken || !pendingSpotifyExportListId) {
+      return;
+    }
+
+    const nextListId = pendingSpotifyExportListId;
+    setPendingSpotifyExportListId('');
+    void exportListToSpotify(nextListId);
+  }, [hasHydrated, pendingSpotifyExportListId, spotifySession?.accessToken]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     const hydrate = async () => {
       const persistedState = await loadAppState();
 
       if (!isMounted) return;
+      setHasStoredSnapshot(Boolean(persistedState?.__meta?.hasStoredSnapshot));
 
       let nextPreferences = {
         ...initialState.preferences,
@@ -747,6 +1198,7 @@ export default function useBSideApp() {
 
       setCurrentUser(nextCurrentUser);
       setReviews(nextReviews);
+      setWishlist(persistedState.wishlist);
       setListeningHistory(persistedState.listeningHistory);
       setLists(nextLists);
       setTop5(persistedState.top5);
@@ -771,10 +1223,10 @@ export default function useBSideApp() {
 
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 1200);
+    }, hasStoredSnapshot ? 220 : 650);
 
     return () => clearTimeout(timer);
-  }, [hasHydrated]);
+  }, [hasHydrated, hasStoredSnapshot]);
 
   useEffect(() => {
     setCurrentUser((prevUser) => ({
@@ -790,6 +1242,7 @@ export default function useBSideApp() {
       saveAppState({
         currentUser,
         reviews,
+        wishlist,
         listeningHistory,
         lists,
         top5,
@@ -809,6 +1262,7 @@ export default function useBSideApp() {
     hasHydrated,
     currentUser,
     reviews,
+    wishlist,
     listeningHistory,
     lists,
     top5,
@@ -818,6 +1272,44 @@ export default function useBSideApp() {
     blockedHandles,
     reports,
     preferences,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated || !preferences.notificationsEnabled) {
+      setPushPermissionStatus('disabled');
+      return;
+    }
+
+    registerForPushNotifications()
+      .then((result) => {
+        setPushPermissionStatus(
+          result.ok ? result.permission || 'granted' : result.permission || 'denied'
+        );
+      })
+      .catch(() => {
+        setPushPermissionStatus('error');
+      });
+  }, [hasHydrated, preferences.notificationsEnabled]);
+
+  useEffect(() => {
+    if (!hasHydrated || !preferences.streakAlertsEnabled) {
+      void cancelStreakWarning();
+      return;
+    }
+
+    if (listeningStreak.isAtRisk) {
+      void scheduleStreakWarning({
+        streakCount: listeningStreak.current,
+      });
+      return;
+    }
+
+    void cancelStreakWarning();
+  }, [
+    hasHydrated,
+    listeningStreak.current,
+    listeningStreak.isAtRisk,
+    preferences.streakAlertsEnabled,
   ]);
 
   useEffect(() => {
@@ -879,7 +1371,12 @@ export default function useBSideApp() {
     let isMounted = true;
 
     const loadAuthenticatedExtras = async () => {
-      const [remoteState, listeningSnapshot, notificationsSnapshot] =
+      const [
+        remoteState,
+        listeningSnapshot,
+        notificationsSnapshot,
+        chatsSnapshot,
+      ] =
         await Promise.all([
           loadAuthenticatedCollections({
             userId: authSession.user.id,
@@ -892,6 +1389,7 @@ export default function useBSideApp() {
           }),
           fetchCurrentUserListeningHistory(authSession.user.id),
           fetchBackendNotifications(authSession.user.id),
+          fetchCurrentUserChats(authSession.user.id),
         ]);
 
       if (!isMounted) {
@@ -931,6 +1429,14 @@ export default function useBSideApp() {
         setAuthMessage((prevMessage) => prevMessage || notificationsSnapshot.message);
       }
 
+      if (chatsSnapshot.ok) {
+        setGlobalChats((prevChats) =>
+          mergeChatCollections(chatsSnapshot.chats, prevChats)
+        );
+      } else if (chatsSnapshot.message) {
+        setAuthMessage((prevMessage) => prevMessage || chatsSnapshot.message);
+      }
+
       if (remoteState.message) {
         setAuthMessage(remoteState.message);
       }
@@ -962,15 +1468,124 @@ export default function useBSideApp() {
             prevNotifications
           ).slice(0, 50)
         );
+
+        if (!notification.read && preferences.notificationsEnabled) {
+          void sendLocalNotification({
+            title: notification.title,
+            body: notification.body,
+            data: {
+              type: notification.type,
+              entityType: notification.entityType,
+              entityId: notification.entityId,
+            },
+          });
+        }
       },
     });
-  }, [authSession?.user?.id, hasHydrated, supabaseStatus.isConfigured]);
+  }, [
+    authSession?.user?.id,
+    hasHydrated,
+    preferences.notificationsEnabled,
+    supabaseStatus.isConfigured,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasHydrated ||
+      !supabaseStatus.isConfigured ||
+      !authSession?.user?.id
+    ) {
+      return undefined;
+    }
+
+    return subscribeToUserMessages({
+      userId: authSession.user.id,
+      onInsert: ({ chatUser, message }) => {
+        setGlobalChats((prevChats) => {
+          const normalizedHandle = normalizeHandle(chatUser.handle);
+          const existingChat = prevChats.find(
+            (chat) => getChatHandleKey(chat) === normalizedHandle
+          );
+
+          const nextChat = existingChat
+            ? {
+                ...existingChat,
+                user: chatUser,
+                unread: (existingChat.unread || 0) + 1,
+                messages: [...existingChat.messages, message],
+              }
+            : {
+                id: `chat-${chatUser.id || chatUser.handle}`,
+                user: chatUser,
+                unread: 1,
+                messages: [message],
+              };
+
+          return mergeChatCollections(
+            [nextChat],
+            prevChats.filter(
+              (chat) => getChatHandleKey(chat) !== normalizedHandle
+            )
+          );
+        });
+
+        if (preferences.notificationsEnabled) {
+          void sendLocalNotification({
+            title:
+              message.messageType === 'recommendation'
+                ? `${chatUser.name} te recomendó un disco`
+                : `${chatUser.name} te escribió`,
+            body:
+              message.messageType === 'recommendation'
+                ? `${message.albumTitle} ya está esperándote en tu inbox.`
+                : message.text || 'Tienes un mensaje nuevo en B-Side.',
+            data: {
+              type: message.messageType || 'message',
+              chatId: `chat-${chatUser.id || chatUser.handle}`,
+            },
+          });
+        }
+      },
+    });
+  }, [
+    authSession?.user?.id,
+    hasHydrated,
+    preferences.notificationsEnabled,
+    supabaseStatus.isConfigured,
+  ]);
+
+  useEffect(() => {
+    if (
+      !hasHydrated ||
+      !preferences.streakAlertsEnabled ||
+      !listeningStreak?.isAtRisk
+    ) {
+      return;
+    }
+
+    if (new Date().getHours() < 18) {
+      return;
+    }
+
+    pushNotification({
+      type: 'product',
+      title: 'Tu racha esta en riesgo',
+      body:
+        'Todavia puedes salvarla hoy escuchando algo antes de que termine el dia.',
+      read: false,
+      entityType: 'streak-warning',
+      dedupeKey: getLocalDayKey(new Date()),
+    });
+  }, [hasHydrated, listeningStreak?.isAtRisk, preferences.streakAlertsEnabled]);
 
   const pushNotification = ({
     type = 'product',
     title,
     body,
     read = false,
+    entityType = 'product',
+    entityId = null,
+    dedupeKey = '',
   }) => {
     const nextNotification = normalizeNotification({
       id: createId('notification'),
@@ -980,11 +1595,291 @@ export default function useBSideApp() {
       timeLabel: getTimeLabel(),
       createdAt: new Date().toISOString(),
       read,
+      entityType,
+      entityId: entityId || dedupeKey || null,
     });
 
-    setNotifications((prevNotifications) =>
-      [nextNotification, ...prevNotifications].slice(0, 50)
-    );
+    setNotifications((prevNotifications) => {
+      const hasDuplicate = dedupeKey
+        ? prevNotifications.some(
+            (notification) =>
+              notification.entityType === entityType &&
+              notification.entityId === dedupeKey
+          )
+        : false;
+
+      if (hasDuplicate) {
+        return prevNotifications;
+      }
+
+      return [nextNotification, ...prevNotifications].slice(0, 50);
+    });
+
+    if (!read && preferences.notificationsEnabled) {
+      void sendLocalNotification({
+        title,
+        body,
+        data: {
+          type,
+          entityType,
+          entityId: entityId || dedupeKey || null,
+        },
+      });
+    }
+  };
+
+  const runMusicOracle = async (focus = '') => {
+    setIsOracleBusy(true);
+    setOracleMessage('');
+
+    try {
+      const result = await getMusicOracleRecommendations({
+        focus,
+        tasteProfile: oracleTasteProfile,
+        candidates: oracleCandidates,
+      });
+
+      const currentOracleIds = new Set(
+        oracleRecommendations.map((recommendation) => recommendation.id)
+      );
+      let nextRecommendations =
+        (result.recommendations || []).length > 0
+          ? result.recommendations
+          : shuffleCollection(oracleCandidates)
+              .slice(0, 3)
+              .map((candidate) => ({
+              ...candidate,
+              reason:
+                candidate.reason ||
+                'Tanda rápida armada con lo que mejor encaja hoy con tu perfil.',
+            }));
+      let nextSource =
+        (result.recommendations || []).length > 0
+          ? result.source || 'local'
+          : 'fallback';
+
+      const nextIds = nextRecommendations.map((recommendation) => recommendation.id);
+      const repeatedSelection =
+        nextIds.length > 0 &&
+        nextIds.every((recommendationId) => currentOracleIds.has(recommendationId));
+
+      if (repeatedSelection && oracleCandidates.length > nextRecommendations.length) {
+        const freshPool = shuffleCollection(oracleCandidates).filter(
+          (candidate) => !currentOracleIds.has(candidate.id)
+        );
+
+        if (freshPool.length) {
+          nextRecommendations = [
+            ...freshPool.slice(0, 3).map((candidate) => ({
+              ...candidate,
+              reason:
+                candidate.reason ||
+                'Otra vuelta armada con señales distintas de tu perfil.',
+            })),
+          ];
+          nextSource = 'shuffle';
+        }
+      }
+
+      setOracleRecommendations(nextRecommendations);
+      setOracleSource(nextSource);
+
+      if (!nextRecommendations.length) {
+        Alert.alert(
+          'El Oráculo todavía no tiene material',
+          'Necesitamos un poco más de actividad o más discos sugeridos para devolverte algo fuerte.'
+        );
+        setOracleMessage(
+          'Todavía no hay suficiente material para armar una tanda con personalidad.'
+        );
+        return false;
+      }
+
+      pushNotification({
+        type: 'product',
+        title: 'Oráculo actualizado',
+        body:
+          nextSource === 'remote'
+            ? 'B-Side Lab te dejó tres discos nuevos para probar.'
+            : nextSource === 'shuffle'
+              ? 'Movimos el radar para mostrarte otra tanda distinta.'
+            : nextSource === 'fallback'
+              ? 'Te dejamos una tanda rápida armada con lo que más encaja hoy.'
+              : 'Te dejamos una selección afinada con tu historial reciente.',
+        read: true,
+      });
+
+      setOracleMessage(
+        nextSource === 'remote'
+          ? 'Tanda afinada con B-Side Lab.'
+          : nextSource === 'shuffle'
+            ? 'Movimos la selección para no repetirte exactamente lo mismo.'
+          : nextSource === 'fallback'
+            ? 'Tanda rápida armada con tus señales más fuertes.'
+            : 'Tanda afinada con tu perfil actual.'
+      );
+
+      return true;
+    } catch (error) {
+      console.error('No pudimos actualizar el Oráculo:', error);
+      setOracleMessage(
+        'No pudimos refrescar la tanda ahora mismo. Probá otra vez en un rato.'
+      );
+      Alert.alert(
+        'No pudimos actualizar el Oráculo',
+        'Intentá otra vez en un rato.'
+      );
+      return false;
+    } finally {
+      setIsOracleBusy(false);
+    }
+  };
+
+  const refreshSpotifyConnection = async () => {
+    const result = await getSpotifyUserSession();
+
+    if (!result.ok) {
+      setSpotifySession(null);
+      setSpotifyProfile(null);
+      return result;
+    }
+
+    const nextSession = result.session || null;
+    setSpotifySession(nextSession);
+
+    if (!nextSession?.accessToken) {
+      setSpotifyProfile(null);
+      return result;
+    }
+
+    const profileResult = await fetchSpotifyCurrentUser();
+
+    if (profileResult.ok) {
+      setSpotifyProfile(profileResult.profile || null);
+    } else {
+      setSpotifyProfile(null);
+    }
+
+    return {
+      ...result,
+      profile: profileResult.ok ? profileResult.profile : null,
+    };
+  };
+
+  const connectSpotifyAccount = async (options = {}) => {
+    if (!spotifyStatus.isConfigured) {
+      Alert.alert(
+        'Spotify pendiente',
+        'Falta EXPO_PUBLIC_SPOTIFY_CLIENT_ID para conectar una cuenta real.'
+      );
+      return false;
+    }
+
+    if (spotifySession?.accessToken) {
+      return true;
+    }
+
+    if (options.pendingListId) {
+      await setPendingSpotifyExportList(options.pendingListId);
+    }
+
+    const result = await startSpotifyConnect();
+
+    if (!result.ok) {
+      Alert.alert('No pudimos conectar Spotify', result.message);
+      return false;
+    }
+
+    pushNotification({
+      type: 'product',
+      title: 'Conectando Spotify',
+      body: 'Terminá el permiso en Spotify. B-Side retoma la exportación apenas vuelvas.',
+      read: true,
+    });
+
+    return true;
+  };
+
+  const exportListToSpotify = async (listId) => {
+    const list = listId === 'wishlist'
+      ? wishlistList
+      : lists.find((candidateList) => candidateList.id === listId);
+
+    if (!list) {
+      Alert.alert(
+        'Todavía no cargamos esa lista',
+        'Esperá un segundo y volvé a intentar la exportación.'
+      );
+      return false;
+    }
+
+    if (!spotifySession?.accessToken) {
+      const connected = await connectSpotifyAccount({ pendingListId: listId });
+      return connected;
+    }
+
+    setIsSpotifyExportBusy(true);
+
+    try {
+      const result = await exportListToSpotifyPlaylist(list);
+
+      if (!result.ok) {
+        Alert.alert('No pudimos exportar la lista', result.message);
+        return false;
+      }
+
+      pushNotification({
+        type: 'product',
+        title: 'Lista exportada a Spotify',
+        body:
+          `"${list.name}" ya se creó en Spotify con ${result.matchedCount} tema${
+            result.matchedCount === 1 ? '' : 's'
+          }.` +
+          (result.albumSeedCount
+            ? ` ${result.albumSeedCount} salieron de discos que se resolvieron como sampler.`
+            : ''),
+        read: true,
+      });
+
+      if (result.playlist?.external_urls?.spotify) {
+        const exportedDisks = result.matchedCount + result.missingCount;
+        const exportSummary =
+          result.missingCount > 0
+            ? `Spotify pudo convertir ${result.matchedCount} de ${exportedDisks} discos en una playlist. ${
+                result.albumSeedCount
+                  ? `${result.albumSeedCount} entraron usando un tema representativo del álbum. `
+                  : ''
+              }${result.missingCount} quedaron afuera porque Spotify no encontró una versión útil.`
+            : result.albumSeedCount
+              ? `Tu lista ya está en Spotify. ${result.albumSeedCount} discos entraron como temas representativos del álbum.`
+              : 'La playlist ya está lista en tu cuenta de Spotify.';
+
+        Alert.alert(
+          'Playlist lista',
+          exportSummary,
+          [
+            { text: 'Cerrar', style: 'cancel' },
+            {
+              text: 'Abrir Spotify',
+              onPress: () => {
+                void Linking.openURL(result.playlist.external_urls.spotify);
+              },
+            },
+          ]
+        );
+      }
+
+      return true;
+    } finally {
+      setIsSpotifyExportBusy(false);
+    }
+  };
+
+  const disconnectSpotifyAccount = async () => {
+    const result = await disconnectSpotifyUser();
+    setSpotifySession(null);
+    setSpotifyProfile(null);
+    return result;
   };
 
   const loadAuthenticatedCollections = async ({
@@ -1341,17 +2236,330 @@ export default function useBSideApp() {
       followingCount: resolvedUser?.followingCount || 0,
     };
   };
+  const getCompatibilityForHandle = (handle) => {
+    if (!handle || isCurrentUserHandle(handle)) {
+      return null;
+    }
+
+    const normalizedHandle = normalizeHandle(handle);
+    const user = resolveUserSnapshot(normalizedHandle);
+    const userReviews = visibleReviews.filter(
+      (review) => normalizeHandle(review.user) === normalizedHandle
+    );
+
+    return buildCompatibilitySummary({
+      user,
+      userReviews,
+      ownTasteAlbumKeys,
+      ownTasteArtistKeys,
+    });
+  };
   const getUserByHandle = (handle) => resolveUserSnapshot(handle);
-  const getListById = (listId) => lists.find((list) => list.id === listId) || null;
+  const getArtistSnapshot = (artistName) => {
+    const normalizedArtist = createArtistKey(artistName);
+
+    if (!normalizedArtist) {
+      return {
+        fans: [],
+        reviews: [],
+        relatedArtists: [],
+      };
+    }
+
+    const reviewsForArtist = visibleReviews
+      .filter((review) => createArtistKey(review.artist) === normalizedArtist)
+      .sort(
+        (left, right) =>
+          getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+      )
+      .slice(0, 4);
+    const fanMap = new Map();
+    const relatedArtistMap = new Map();
+
+    const markFan = (handle, reason) => {
+      const normalizedHandle = normalizeHandle(handle);
+
+      if (normalizedHandle === currentUserHandle) {
+        return;
+      }
+
+      const user = resolveUserSnapshot(normalizedHandle);
+
+      if (!user) {
+        return;
+      }
+
+      fanMap.set(normalizedHandle, {
+        ...user,
+        handle: normalizedHandle,
+        reason,
+      });
+
+      const otherAlbums = [
+        ...(user.top5 || []),
+        ...visibleReviews
+          .filter((review) => normalizeHandle(review.user) === normalizedHandle)
+          .map((review) => ({
+            title: review.albumTitle,
+            artist: review.artist,
+            cover: review.cover,
+            artistId: review.artistId,
+            artistUrl: review.artistUrl,
+            source: review.source,
+          })),
+      ];
+
+      otherAlbums.forEach((album) => {
+        const otherArtistKey = createArtistKey(album.artist);
+
+        if (!otherArtistKey || otherArtistKey === normalizedArtist) {
+          return;
+        }
+
+        const existingRelatedArtist = relatedArtistMap.get(otherArtistKey) || {
+          name: album.artist,
+          cover: album.cover || '',
+          artistId: album.artistId || '',
+          artistUrl: album.artistUrl || '',
+          source: album.source || '',
+          anchorAlbumTitle: album.title || '',
+          score: 0,
+        };
+
+        existingRelatedArtist.score += 6;
+        existingRelatedArtist.cover = existingRelatedArtist.cover || album.cover || '';
+        existingRelatedArtist.artistId =
+          existingRelatedArtist.artistId || album.artistId || '';
+        existingRelatedArtist.artistUrl =
+          existingRelatedArtist.artistUrl || album.artistUrl || '';
+        existingRelatedArtist.source =
+          existingRelatedArtist.source || album.source || '';
+        existingRelatedArtist.anchorAlbumTitle =
+          existingRelatedArtist.anchorAlbumTitle || album.title || '';
+        relatedArtistMap.set(otherArtistKey, existingRelatedArtist);
+      });
+    };
+
+    reviewsForArtist.forEach((review) => {
+      markFan(review.user, `Lo reseñó en "${review.albumTitle}".`);
+    });
+
+    listeningHistory
+      .filter((entry) => createArtistKey(entry.artist) === normalizedArtist)
+      .forEach((entry) => {
+        if (entry.source === 'player') {
+          markFan(currentUserHandle, `Lo escuchaste recientemente con "${entry.title}".`);
+        }
+      });
+
+    Object.entries(MOCK_USERS).forEach(([handle, user]) => {
+      if (
+        (user.top5 || []).some(
+          (album) => createArtistKey(album.artist) === normalizedArtist
+        )
+      ) {
+        markFan(handle, 'Lo tiene dentro de su Top 5.');
+      }
+    });
+
+    return {
+      fans: Array.from(fanMap.values()).slice(0, 4),
+      reviews: reviewsForArtist,
+      relatedArtists: Array.from(relatedArtistMap.values())
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 6),
+    };
+  };
+  const getListById = (listId) => {
+    if (listId === 'wishlist') {
+      return wishlistList;
+    }
+
+    return lists.find((list) => list.id === listId) || null;
+  };
   const getChatById = (chatId) =>
     globalChats.find((chat) => chat.id === chatId) || null;
+  const isAlbumInWishlist = (album) => {
+    if (!album) {
+      return false;
+    }
 
-  const playTrack = (track) => {
-    if (!track) return;
+    const albumKey = createAlbumKey(album.title, album.artist);
+    const albumId = album.albumId || album.id || albumKey;
+
+    return wishlist.some(
+      (item) =>
+        (item.albumId || item.id) === albumId ||
+        createAlbumKey(item.title, item.artist) === albumKey
+    );
+  };
+
+  const hydrateResolvedPlaybackAcrossState = (originalTrack, playableTrack) => {
+    const reference = buildAlbumReference(originalTrack);
+
+    if (!reference.albumId && !reference.albumKey) {
+      return;
+    }
+
+    setWishlist((prevWishlist) =>
+      prevWishlist.map((item) =>
+        matchesAlbumReference(item, reference)
+          ? mergePlayableTrackData(item, playableTrack)
+          : item
+      )
+    );
+    setLists((prevLists) =>
+      prevLists.map((list) => ({
+        ...list,
+        items: list.items.map((item) =>
+          matchesAlbumReference(item, reference)
+            ? mergePlayableTrackData(item, playableTrack)
+            : item
+        ),
+      }))
+    );
+    setTop5((prevTop5) =>
+      prevTop5.map((item) =>
+        matchesAlbumReference(item, reference)
+          ? mergePlayableTrackData(item, playableTrack)
+          : item
+      )
+    );
+    setReviews((prevReviews) =>
+      prevReviews.map((review) =>
+        matchesAlbumReference(
+          {
+            albumId: review.albumId,
+            title: review.albumTitle,
+            artist: review.artist,
+          },
+          reference
+        )
+          ? {
+              ...review,
+              previewUrl: review.previewUrl || playableTrack.previewUrl || '',
+            }
+          : review
+      )
+    );
+    setReviewAlbum((prevAlbum) =>
+      prevAlbum && matchesAlbumReference(prevAlbum, reference)
+        ? mergePlayableTrackData(prevAlbum, playableTrack)
+        : prevAlbum
+    );
+    setListModalAlbum((prevAlbum) =>
+      prevAlbum && matchesAlbumReference(prevAlbum, reference)
+        ? mergePlayableTrackData(prevAlbum, playableTrack)
+        : prevAlbum
+    );
+    setRecommendedAlbum((prevAlbum) =>
+      prevAlbum && matchesAlbumReference(prevAlbum, reference)
+        ? mergePlayableTrackData(prevAlbum, playableTrack)
+        : prevAlbum
+    );
+    setCurrentTrack((prevTrack) =>
+      prevTrack && matchesAlbumReference(prevTrack, reference)
+        ? mergePlayableTrackData(prevTrack, playableTrack)
+        : prevTrack
+    );
+  };
+
+  const openExternalPlaybackLink = async (track) => {
+    const nextUrl = `${track?.externalUrl || ''}`.trim();
+
+    if (!nextUrl) {
+      return false;
+    }
+
+    try {
+      const canOpen = await Linking.canOpenURL(nextUrl);
+
+      if (!canOpen) {
+        return false;
+      }
+
+      await Linking.openURL(nextUrl);
+      return true;
+    } catch (error) {
+      console.warn('No pudimos abrir el enlace externo del album:', error);
+      return false;
+    }
+  };
+
+  const resolveTrackForPlayback = async (track) => {
+    if (!track) {
+      return null;
+    }
+
+    if (track.previewUrl) {
+      return track;
+    }
+
+    const reference = buildAlbumReference(track);
+    const cacheKey = reference.albumId || reference.albumKey;
+
+    if (cacheKey && playbackResolutionCacheRef.current.has(cacheKey)) {
+      const cachedTrack = playbackResolutionCacheRef.current.get(cacheKey);
+      return cachedTrack
+        ? mergePlayableTrackData(track, cachedTrack)
+        : null;
+    }
+
+    const resolution = await resolveAlbumPlayback(track);
+
+    if (!resolution?.ok || !resolution.track?.previewUrl) {
+      if (cacheKey) {
+        playbackResolutionCacheRef.current.set(cacheKey, null);
+      }
+
+      return null;
+    }
+
+    const playableTrack = mergePlayableTrackData(track, resolution.track);
+
+    if (cacheKey) {
+      playbackResolutionCacheRef.current.set(cacheKey, playableTrack);
+    }
+
+    hydrateResolvedPlaybackAcrossState(track, playableTrack);
+    return playableTrack;
+  };
+
+  const playTrack = async (track) => {
+    if (!track) return false;
+
+    const playableTrack = track.previewUrl
+      ? track
+      : await resolveTrackForPlayback(track);
+
+    if (!playableTrack?.previewUrl) {
+      const fallbackTrack = playableTrack || track;
+      const hasExternalUrl = `${fallbackTrack?.externalUrl || ''}`.trim().length > 0;
+
+      if (hasExternalUrl) {
+        const didOpenExternal = await openExternalPlaybackLink(fallbackTrack);
+
+        if (!didOpenExternal) {
+          Alert.alert(
+            'No pudimos abrir el release',
+            'B-Side encontro un enlace externo, pero no logramos abrirlo desde este dispositivo.'
+          );
+        }
+
+        return false;
+      }
+
+      Alert.alert(
+        'Sin audio disponible',
+        'Este release aparece en el catálogo, pero no trajo preview ni una salida externa confiable. Igual podés guardarlo, reseñarlo o seguir al artista.'
+      );
+
+      return false;
+    }
 
     const nextListeningEntry = normalizeListeningEntry({
-      ...track,
-      albumId: track.albumId || track.id || track.title,
+      ...playableTrack,
+      albumId: playableTrack.albumId || playableTrack.id || playableTrack.title,
       createdAt: new Date().toISOString(),
       source: 'player',
     });
@@ -1363,9 +2571,9 @@ export default function useBSideApp() {
       Date.now() - getTimestampValue(latestSameAlbum.createdAt) < 20 * 60 * 1000
     );
 
-    setCurrentTrack(track);
+    setCurrentTrack(playableTrack);
     if (!shouldStoreListeningEvent) {
-      return;
+      return true;
     }
 
     setListeningHistory((prevHistory) =>
@@ -1381,6 +2589,8 @@ export default function useBSideApp() {
         }
       );
     }
+
+    return true;
   };
   const closeTrack = () => setCurrentTrack(null);
 
@@ -1408,6 +2618,7 @@ export default function useBSideApp() {
       hasCompletedOnboarding: false,
       sessionMode: 'guest',
     }));
+    setOracleRecommendations([]);
   };
 
   const updatePreferences = (nextPreferences) => {
@@ -1968,7 +3179,7 @@ export default function useBSideApp() {
   const createList = (input) => {
     const listDraft =
       typeof input === 'string'
-        ? { name: input, isPublic: false }
+        ? { name: input, isPublic: !preferences.privateListsByDefault }
         : input || {};
     const trimmedName = listDraft.name?.trim();
 
@@ -1978,7 +3189,10 @@ export default function useBSideApp() {
       id: createId('list'),
       name: trimmedName,
       color: createRandomColor(),
-      isPublic: listDraft.isPublic !== false,
+      isPublic:
+        typeof listDraft.isPublic === 'boolean'
+          ? listDraft.isPublic
+          : !preferences.privateListsByDefault,
       items: [],
     });
 
@@ -1995,6 +3209,43 @@ export default function useBSideApp() {
       }.`,
       read: true,
     });
+  };
+
+  const addAlbumToWishlist = (album) => {
+    if (!album) return false;
+
+    const nextEntry = createListEntry(album);
+
+    if (
+      wishlist.some(
+        (item) =>
+          (item.albumId || item.id) === nextEntry.albumId ||
+          createAlbumKey(item.title, item.artist) ===
+            createAlbumKey(nextEntry.title, nextEntry.artist)
+      )
+    ) {
+      Alert.alert(
+        'Ya estaba guardado',
+        `"${album.title}" ya está en tu lista Por escuchar.`
+      );
+      return false;
+    }
+
+    setWishlist((prevWishlist) => [nextEntry, ...prevWishlist].slice(0, 80));
+    pushNotification({
+      type: 'product',
+      title: 'Guardado para después',
+      body: `"${album.title}" entró en tu lista Por escuchar.`,
+      read: true,
+    });
+
+    return true;
+  };
+
+  const removeWishlistAlbum = (entryId) => {
+    setWishlist((prevWishlist) =>
+      prevWishlist.filter((item) => (item.entryId || item.id) !== entryId)
+    );
   };
 
   const pinToTop5 = (album) => {
@@ -2307,6 +3558,8 @@ export default function useBSideApp() {
         albumId: reviewAlbum.id || reviewAlbum.albumId || data.album,
         albumTitle: data.album,
         artist: reviewAlbum.artist,
+        artistId: reviewAlbum.artistId,
+        artistUrl: reviewAlbum.artistUrl,
         cover: reviewAlbum.cover,
         previewUrl: reviewAlbum.previewUrl,
         rating: data.rating,
@@ -2354,6 +3607,14 @@ export default function useBSideApp() {
   };
 
   const addAlbumToList = (listId) => {
+    if (listId === 'wishlist') {
+      if (listModalAlbum) {
+        addAlbumToWishlist(listModalAlbum);
+        closeAddToList();
+      }
+      return;
+    }
+
     if (!listModalAlbum) return;
 
     const targetList = lists.find((list) => list.id === listId);
@@ -2404,6 +3665,11 @@ export default function useBSideApp() {
   };
 
   const removeListItem = (listId, entryId) => {
+    if (listId === 'wishlist') {
+      removeWishlistAlbum(entryId);
+      return;
+    }
+
     let syncedList = null;
 
     setLists((prevLists) =>
@@ -2425,6 +3691,11 @@ export default function useBSideApp() {
   };
 
   const updateListOrder = (listId, items) => {
+    if (listId === 'wishlist') {
+      setWishlist(items);
+      return;
+    }
+
     let syncedList = null;
 
     setLists((prevLists) =>
@@ -2446,6 +3717,41 @@ export default function useBSideApp() {
   };
 
   const shuffleList = (listId) => {
+    if (listId === 'wishlist') {
+      if (wishlist.length === 0) {
+        return false;
+      }
+
+      const nextItems = [...wishlist];
+
+      for (let index = nextItems.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        const currentItem = nextItems[index];
+        nextItems[index] = nextItems[swapIndex];
+        nextItems[swapIndex] = currentItem;
+      }
+
+      setWishlist(nextItems);
+
+      const wishlistPlaybackCandidate =
+        nextItems.find((item) => item.previewUrl) ||
+        nextItems.find((item) => item.externalUrl) ||
+        nextItems[0];
+
+      if (wishlistPlaybackCandidate) {
+        void playTrack(wishlistPlaybackCandidate);
+      }
+
+      pushNotification({
+        type: 'product',
+        title: 'Wishlist mezclada',
+        body: 'Tu lista Por escuchar se reorganizo en modo aleatorio.',
+        read: true,
+      });
+
+      return true;
+    }
+
     let nextList = null;
     let shuffledTrack = null;
 
@@ -2468,7 +3774,11 @@ export default function useBSideApp() {
           nextItems[swapIndex] = currentItem;
         }
 
-        shuffledTrack = nextItems[0] || null;
+        shuffledTrack =
+          nextItems.find((item) => item.previewUrl) ||
+          nextItems.find((item) => item.externalUrl) ||
+          nextItems[0] ||
+          null;
         nextList = normalizeList({
           ...list,
           items: nextItems,
@@ -2482,7 +3792,7 @@ export default function useBSideApp() {
     }
 
     if (shuffledTrack) {
-      playTrack(shuffledTrack);
+      void playTrack(shuffledTrack);
     }
 
     pushNotification({
@@ -2498,6 +3808,10 @@ export default function useBSideApp() {
   };
 
   const toggleListVisibility = (listId) => {
+    if (listId === 'wishlist') {
+      return false;
+    }
+
     let nextVisibility = null;
     let listName = '';
     let nextList = null;
@@ -2601,64 +3915,207 @@ export default function useBSideApp() {
   };
 
   const markChatAsRead = (chatId) => {
+    const targetChat = globalChats.find((chat) => chat.id === chatId);
+
     setGlobalChats((prevChats) =>
       prevChats.map((chat) =>
         chat.id === chatId ? { ...chat, unread: 0 } : chat
       )
     );
+
+    if (authSession?.user?.id && targetChat?.user?.handle) {
+      void markConversationMessagesAsRead({
+        userId: authSession.user.id,
+        peerHandle: targetChat.user.handle,
+      }).then((result) => {
+        if (!result.ok && !result.skipped) {
+          setAuthMessage(result.message);
+        }
+      });
+    }
+  };
+
+  const updateChatTheme = (chatId, themeColor) => {
+    if (!chatId || !themeColor) {
+      return false;
+    }
+
+    setGlobalChats((prevChats) =>
+      prevChats.map((chat) =>
+        chat.id === chatId
+          ? {
+              ...chat,
+              themeColor,
+            }
+          : chat
+      )
+    );
+
+    return true;
   };
 
   const sendChatMessage = (chatId, messageData) => {
     const timestamp = getTimeLabel();
+    const createdAt = new Date().toISOString();
+    let targetChatRef = null;
+    let optimisticMessage = null;
 
-    setGlobalChats((prevChats) =>
-      prevChats.map((chat) => {
-        if (chat.id !== chatId) return chat;
+    setGlobalChats((prevChats) => {
+      const targetChat = prevChats.find((chat) => chat.id === chatId);
 
-        return {
-          ...chat,
-          unread: 0,
-          messages: [
-            ...chat.messages,
-            {
-              id: createId('message'),
-              ...messageData,
-              sender: 'me',
-              time: timestamp,
-            },
-          ],
-        };
-      })
-    );
+      if (!targetChat) {
+        return prevChats;
+      }
+
+      targetChatRef = targetChat;
+      optimisticMessage = {
+        id: createId('message'),
+        createdAt,
+        messageType: messageData?.messageType || 'text',
+        ...messageData,
+        sender: 'me',
+        time: timestamp,
+      };
+
+      const nextChat = {
+        ...targetChat,
+        unread: 0,
+        messages: [
+          ...targetChat.messages,
+          optimisticMessage,
+        ],
+      };
+
+      return [
+        nextChat,
+        ...prevChats.filter((chat) => chat.id !== chatId),
+      ];
+    });
+
+    if (!targetChatRef || !optimisticMessage) {
+      return;
+    }
+
+    if (supabaseStatus.isConfigured && authSession?.user?.id && targetChatRef.user?.handle) {
+      void createMessageRecord({
+        senderId: authSession.user.id,
+        receiverHandle: targetChatRef.user.handle,
+        message: optimisticMessage,
+      }).then((result) => {
+        if (!result.ok && !result.skipped) {
+          setAuthMessage(result.message);
+          return;
+        }
+
+        if (result.message?.backendId) {
+          setGlobalChats((prevChats) =>
+            prevChats.map((chat) => {
+              if (chat.id !== chatId) {
+                return chat;
+              }
+
+              return {
+                ...chat,
+                messages: chat.messages.map((message) =>
+                  message.id === optimisticMessage.id
+                    ? {
+                        ...message,
+                        ...result.message,
+                      }
+                    : message
+                ),
+              };
+            })
+          );
+        }
+
+        if (result.receiverProfile?.id) {
+          const isRecommendation = optimisticMessage.messageType === 'recommendation';
+          void createBackendNotification({
+            recipientId: result.receiverProfile.id,
+            actorId: authSession.user.id,
+            type: 'social',
+            title: isRecommendation
+              ? `${currentUserHandle} te recomendó un disco`
+              : `${currentUserHandle} te escribió`,
+            body: isRecommendation
+              ? `"${optimisticMessage.albumTitle}" te llegó por recomendación directa.`
+              : optimisticMessage.text || 'Tienes un mensaje nuevo en B-Side.',
+            entityType: isRecommendation ? 'album-recommendation' : 'message',
+            entityId:
+              optimisticMessage.albumId || result.message?.backendId || optimisticMessage.id,
+          });
+        }
+      });
+    }
   };
 
-  const handleShareAlbum = (albumToShare, onSent) => {
-    Alert.alert(
-      'Enviar a Fran',
-      `Queres enviarle "${albumToShare.title}" a @fran_bside?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Enviar',
-          onPress: () => {
-            sendChatMessage('chat-1', {
-              text: 'Mira este disco.',
-              albumCover: albumToShare.cover,
-              albumTitle: albumToShare.title,
-              albumArtist: albumToShare.artist,
-            });
-            pushNotification({
-              type: 'social',
-              title: 'Disco compartido',
-              body: `"${albumToShare.title}" se mando por mensaje.`,
-              read: true,
-            });
-            Alert.alert('Enviado', 'El disco se mando por mensaje.');
-            onSent?.();
-          },
-        },
-      ]
-    );
+  const openRecommendAlbum = (album) => {
+    if (!preferences.allowDirectMessages) {
+      Alert.alert(
+        'Mensajes desactivados',
+        'Activa las recomendaciones directas desde el Centro de privacidad para compartir discos por mensaje.'
+      );
+      return false;
+    }
+
+    setRecommendedAlbum(album);
+    return true;
+  };
+  const closeRecommendAlbum = () => setRecommendedAlbum(null);
+  const recommendAlbumToFriend = ({ chatId, note = '' }) => {
+    if (!recommendedAlbum || !chatId) {
+      return false;
+    }
+
+    const targetChat = globalChats.find((chat) => chat.id === chatId);
+
+    if (!targetChat) {
+      return false;
+    }
+
+    const targetHandle = normalizeHandle(targetChat.user.handle);
+
+    if (blockedHandles.includes(targetHandle)) {
+      Alert.alert(
+        'Perfil bloqueado',
+        'Desbloquea este perfil para volver a recomendarle discos.'
+      );
+      return false;
+    }
+
+    const artistKey = `${recommendedAlbum.artist || ''}`.trim().toLowerCase();
+    const recommendationReason = ownTasteArtistKeys.has(artistKey)
+      ? 'Va con la música que más te mueve últimamente.'
+      : followingSet.has(targetHandle)
+        ? 'Puede entrar muy bien en su radar musical.'
+        : 'Ideal para sumar algo nuevo a su descubrimiento.';
+
+    sendChatMessage(chatId, {
+      messageType: 'recommendation',
+      text: note.trim() ? 'Te dejé esta recomendación.' : '',
+      albumId:
+        recommendedAlbum.albumId ||
+        recommendedAlbum.id ||
+        createAlbumKey(recommendedAlbum.title, recommendedAlbum.artist),
+      recommendationNote: note.trim(),
+      recommendationReason,
+      albumCover: recommendedAlbum.cover,
+      albumTitle: recommendedAlbum.title,
+      albumArtist: recommendedAlbum.artist,
+      previewUrl: recommendedAlbum.previewUrl || '',
+      ctaLabel: 'Abrir álbum',
+    });
+
+    pushNotification({
+      type: 'social',
+      title: 'Recomendación enviada',
+      body: `"${recommendedAlbum.title}" ya viaja por mensaje hacia ${targetHandle}.`,
+      read: true,
+    });
+
+    setRecommendedAlbum(null);
+    return true;
   };
 
   const openShareProfile = () => setIsShareVisible(true);
@@ -2667,7 +4124,7 @@ export default function useBSideApp() {
   const openStoryCard = () => {
     if (top5.length === 0) {
       Alert.alert(
-        'Top 5 vacio',
+        'Top 5 vacío',
         'Fija al menos un disco desde el buscador para armar tu tarjeta.'
       );
       return false;
@@ -2687,12 +4144,20 @@ export default function useBSideApp() {
     reviews,
     visibleReviews,
     feedReviews,
+    wishlist,
+    wishlistList,
     listeningHistory,
     listeningStreak,
     recentListening,
     friendActivity,
     interestingUsers,
     interestingAlbums,
+    interestingArtists,
+    oracleRecommendations,
+    oracleSource,
+    oracleMessage,
+    musicOracleStatus,
+    achievementSummary,
     lists,
     top5,
     globalChats,
@@ -2702,15 +4167,24 @@ export default function useBSideApp() {
     blockedHandles,
     reports,
     authSession,
+    spotifySession,
+    spotifyProfile,
     authMessage,
     isAuthBusy,
     isProfileSaving,
+    isSpotifyExportBusy,
     isBackendConfigured: supabaseStatus.isConfigured,
+    spotifyStatus,
+    spotifyPlaybackStatus,
+    pushSupportStatus,
+    pushPermissionStatus,
+    isOracleBusy,
     currentTrack,
     listModalAlbum,
     isCreateListVisible,
     isShareVisible,
     isStoryVisible,
+    recommendedAlbum,
     editingReview,
     reviewAlbum,
     reviewContext,
@@ -2722,9 +4196,12 @@ export default function useBSideApp() {
     isFollowingHandle,
     isBlockedHandle,
     getSocialStatsForHandle,
+    getCompatibilityForHandle,
     getUserByHandle,
+    getArtistSnapshot,
     getListById,
     getChatById,
+    isAlbumInWishlist,
     playTrack,
     closeTrack,
     completeOnboarding,
@@ -2740,12 +4217,17 @@ export default function useBSideApp() {
     sendMagicLinkAccess,
     signOutBackendAccount,
     refreshAuthenticatedUser,
+    connectSpotifyAccount,
+    disconnectSpotifyAccount,
+    exportListToSpotify,
+    runMusicOracle,
     setFreemiumPlan,
     markNotificationsAsRead,
     dismissNotification,
     openCreateListModal,
     closeCreateListModal,
     createList,
+    addAlbumToWishlist,
     shuffleList,
     toggleListVisibility,
     pinToTop5,
@@ -2766,10 +4248,15 @@ export default function useBSideApp() {
     saveProfile,
     markChatAsRead,
     sendChatMessage,
-    handleShareAlbum,
+    handleShareAlbum: openRecommendAlbum,
+    openRecommendAlbum,
+    closeRecommendAlbum,
+    recommendAlbumToFriend,
+    updateChatTheme,
     openShareProfile,
     closeShareProfile,
     openStoryCard,
     closeStoryCard,
   };
 }
+

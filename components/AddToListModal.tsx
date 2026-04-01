@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Modal,
   ScrollView,
@@ -32,7 +32,7 @@ const AddToListModal = ({ visible, lists, onClose, onSelect }) => {
                 <View style={styles.listTextBlock}>
                   <Text style={styles.listName}>{list.name}</Text>
                   <Text style={styles.listMeta}>
-                    {list.isPublic ? 'Publica' : 'Privada'} · {list.items.length}{' '}
+                    {list.isPublic ? 'Pública' : 'Privada'} · {list.items.length}{' '}
                     {list.items.length === 1 ? 'item' : 'items'}
                   </Text>
                 </View>
@@ -111,3 +111,4 @@ const styles = StyleSheet.create({
 });
 
 export default AddToListModal;
+

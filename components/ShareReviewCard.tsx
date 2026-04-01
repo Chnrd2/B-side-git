@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Dimensions,
   Image,
@@ -23,7 +23,7 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
   const profileStats = [
     `${user?.plan === 'plus' ? 'Plus' : 'Free'} plan`,
     `${Array.isArray(user?.top5) ? user.top5.length : 0}/5 top`,
-    review?.album ? 'Ultima resena lista' : 'Perfil listo para compartir',
+    review?.album ? 'Última reseña lista' : 'Perfil listo para compartir',
   ];
 
   return (
@@ -123,10 +123,10 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
                 </Text>
               </View>
               <Text style={styles.reviewHighlightTitle}>
-                {review?.album || 'Sin ultima resena todavia'}
+                {review?.album || 'Sin última reseña todavía'}
               </Text>
               <Text style={styles.quote} numberOfLines={3}>
-                "{review?.text || 'Perfil listo para descubrir musica nueva.'}"
+                "{review?.text || 'Perfil listo para descubrir música nueva.'}"
               </Text>
             </View>
           </LinearGradient>
@@ -315,3 +315,4 @@ const styles = StyleSheet.create({
 });
 
 export default ShareReviewCard;
+

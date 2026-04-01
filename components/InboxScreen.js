@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,19 @@ import {
 import { ChevronLeft } from 'lucide-react-native';
 
 const InboxScreen = ({ chats, onClose, onOpenChat }) => {
+  const orderedChats = [...chats].sort((left, right) => {
+    const leftLastMessage = left.messages[left.messages.length - 1];
+    const rightLastMessage = right.messages[right.messages.length - 1];
+    const leftTime = leftLastMessage?.createdAt
+      ? new Date(leftLastMessage.createdAt).getTime()
+      : 0;
+    const rightTime = rightLastMessage?.createdAt
+      ? new Date(rightLastMessage.createdAt).getTime()
+      : 0;
+
+    return rightTime - leftTime;
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -23,7 +36,7 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
       </View>
 
       <FlatList
-        data={chats}
+        data={orderedChats}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 20 }}
         renderItem={({ item }) => {
@@ -31,6 +44,12 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
             item.messages.length > 0
               ? item.messages[item.messages.length - 1]
               : { text: '...', time: '' };
+          const lastMessagePreview =
+            lastMessage.messageType === 'recommendation'
+              ? lastMessage.albumTitle
+                ? `Recomendación: ${lastMessage.albumTitle}`
+                : 'Te llegó una recomendación'
+              : lastMessage.text;
 
           return (
             <TouchableOpacity
@@ -56,7 +75,7 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
                       item.unread > 0 && styles.unreadMessage,
                     ]}
                     numberOfLines={1}>
-                    {lastMessage.text}
+                    {lastMessagePreview}
                   </Text>
                   {item.unread > 0 ? (
                     <View style={styles.badge}>
@@ -131,3 +150,4 @@ const styles = StyleSheet.create({
 });
 
 export default InboxScreen;
+

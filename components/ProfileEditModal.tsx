@@ -50,16 +50,17 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
       }),
     [editThemePreset, editWallpaperUrl, user]
   );
+
   const hasPendingMediaChange =
     editAvatarUrl !== (user?.avatarUrl || '') ||
     editWallpaperUrl !== (user?.wallpaperUrl || '');
   const moderationMessage =
     user?.avatarModerationStatus === 'pending_review' ||
     user?.wallpaperModerationStatus === 'pending_review'
-      ? 'Tu foto o fondo siguen en revision antes de quedar plenamente publicos.'
+      ? 'Tu foto o fondo siguen en revisión antes de quedar públicos.'
       : hasPendingMediaChange
-        ? 'Si guardas una foto o fondo nuevos en una cuenta real, quedaran en revision antes de mostrarse como contenido publico.'
-        : 'Puedes personalizar tu perfil ahora y luego sumar una capa de moderacion automatica.';
+        ? 'Si guardás una foto o fondo nuevos en una cuenta real, quedarán en revisión antes de mostrarse en el perfil.'
+        : 'Podés personalizar tu perfil ahora y seguir afinándolo con el uso.';
 
   const syncFromUser = () => {
     setEditName(user?.name || '');
@@ -89,7 +90,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
         if (!permission.granted) {
           Alert.alert(
             'Permiso requerido',
-            'Necesitamos acceso a tu galeria para elegir una imagen.'
+            'Necesitamos acceso a tu galería para elegir una imagen.'
           );
           return;
         }
@@ -111,8 +112,8 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
       }
     } catch (error) {
       Alert.alert(
-        'No pudimos abrir tu galeria',
-        'Si quieres, pega una URL manualmente.'
+        'No pudimos abrir tu galería',
+        'Si querés, podés pegar una URL manualmente.'
       );
     }
   };
@@ -149,7 +150,10 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}>
             <View style={styles.previewCard}>
               <LinearGradient
                 colors={previewTheme.colors}
@@ -188,7 +192,8 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
                     </Text>
                   )}
                 </View>
-                <View style={{ flex: 1 }}>
+
+                <View style={styles.previewMeta}>
                   <Text style={styles.previewName}>
                     {editName || user?.name || 'Usuario'}
                   </Text>
@@ -235,7 +240,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               style={[styles.input, styles.textarea]}
               value={editBio}
               onChangeText={setEditBio}
-              placeholder="Cuenta algo sobre vos..."
+              placeholder="Contá algo sobre vos..."
               placeholderTextColor="#666"
               multiline
             />
@@ -245,7 +250,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               style={styles.input}
               value={editAvatarUrl}
               onChangeText={setEditAvatarUrl}
-              placeholder="Pega una URL de imagen"
+              placeholder="Pegá una URL de imagen"
               placeholderTextColor="#666"
               autoCapitalize="none"
             />
@@ -255,7 +260,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               style={styles.input}
               value={editWallpaperUrl}
               onChangeText={setEditWallpaperUrl}
-              placeholder="Pega una URL de wallpaper"
+              placeholder="Pegá una URL de wallpaper"
               placeholderTextColor="#666"
               autoCapitalize="none"
             />
@@ -300,6 +305,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.wallpaperRow}>
               {WALLPAPER_LIBRARY.map((wallpaper) => {
                 const isActive = wallpaper.uri === editWallpaperUrl;
@@ -353,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   content: {
-    height: '88%',
+    maxHeight: '92%',
     backgroundColor: '#0A0A0A',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
@@ -365,9 +371,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   title: { color: 'white', fontSize: 24, fontWeight: '800' },
+  scrollContent: {
+    paddingBottom: 26,
+  },
   previewCard: {
     height: 190,
     borderRadius: 26,
@@ -387,6 +396,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
+  previewMeta: { flex: 1 },
   previewAvatar: {
     width: 58,
     height: 58,
@@ -401,11 +411,11 @@ const styles = StyleSheet.create({
   previewAvatarText: { color: 'white', fontSize: 24, fontWeight: '800' },
   previewName: { color: 'white', fontSize: 20, fontWeight: '800' },
   previewHandle: { marginTop: 4, fontWeight: '700' },
-  previewBio: { color: '#E5E7EB', lineHeight: 20, maxWidth: '80%' },
+  previewBio: { color: '#E5E7EB', lineHeight: 20, maxWidth: '85%' },
   mediaRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   mediaButton: {
     flex: 1,
@@ -531,7 +541,6 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     alignItems: 'center',
     marginTop: 10,
-    marginBottom: 40,
   },
   saveButtonDisabled: {
     opacity: 0.72,

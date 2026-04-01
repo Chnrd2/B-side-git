@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -33,12 +33,12 @@ const LegalCenterScreen = ({ onBack, onOpenDocument }) => {
         <View style={styles.heroCard}>
           <View style={styles.heroRow}>
             <FileText color="#E9D5FF" size={18} />
-            <Text style={styles.heroEyebrow}>BORRADOR INTERNO</Text>
+            <Text style={styles.heroEyebrow}>VERSIÓN PRELIMINAR</Text>
           </View>
-          <Text style={styles.heroTitle}>Lo legal conviene escribirlo antes de crecer</Text>
+          <Text style={styles.heroTitle}>Lo legal también forma parte de la experiencia</Text>
           <Text style={styles.heroText}>
-            Esto no reemplaza asesoramiento legal, pero ya deja a B-Side con
-            borradores navegables para terminos, privacidad, comunidad y Plus.
+            Acá queda reunido todo lo que conviene tener claro para cuentas,
+            privacidad, comunidad y plan Plus.
           </Text>
         </View>
 
@@ -55,10 +55,10 @@ const LegalCenterScreen = ({ onBack, onOpenDocument }) => {
             <Text style={styles.sectionText}>{document.summary}</Text>
             <View style={styles.sectionFooter}>
               <Text style={styles.sectionMeta}>
-                Version {document.version} · {document.updatedAt}
+                Versión {document.version} {' · '} {document.updatedAt}
               </Text>
               <View style={styles.openRow}>
-                <Text style={styles.openText}>Abrir borrador</Text>
+                <Text style={styles.openText}>Abrir documento</Text>
                 <ArrowRight color="#E9D5FF" size={16} />
               </View>
             </View>
@@ -68,8 +68,8 @@ const LegalCenterScreen = ({ onBack, onOpenDocument }) => {
         <View style={styles.noticeCard}>
           <ShieldCheck color="#E9D5FF" size={18} />
           <Text style={styles.noticeText}>
-            Antes de publicar: deja estos textos visibles dentro de la app, en
-            web, durante el registro y junto a cualquier checkout del plan Plus.
+            Conviene mantener estos textos visibles dentro de la app, en web,
+            durante el registro y junto a cualquier alta del plan Plus.
           </Text>
         </View>
       </ScrollView>
@@ -162,3 +162,5 @@ const styles = StyleSheet.create({
 });
 
 export default LegalCenterScreen;
+
+

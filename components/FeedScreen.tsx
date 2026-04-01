@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -15,14 +15,11 @@ import {
 import {
   Bell,
   Disc,
-  Flame,
   Headphones,
   Heart,
   MessageCircle,
   Send,
-  Sparkles,
   Trash2,
-  UserRound,
   X,
 } from 'lucide-react-native';
 
@@ -66,7 +63,7 @@ const CommentsModal = ({
             ListEmptyComponent={
               <View style={styles.commentEmptyCard}>
                 <Text style={styles.commentEmptyText}>
-                  Todavia no hay comentarios. Rompe el hielo.
+                  Todavía no hay comentarios. Rompé el hielo.
                 </Text>
               </View>
             }
@@ -88,7 +85,7 @@ const CommentsModal = ({
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.commentInput}
-              placeholder="Escribi un comentario..."
+              placeholder="Escribí un comentario..."
               placeholderTextColor="#666"
               value={newComment}
               onChangeText={setNewComment}
@@ -111,71 +108,49 @@ const SectionLabel = ({ eyebrow, title, subtitle }) => (
   </View>
 );
 
-const ListeningPulseCard = ({
-  currentTrack,
-  listeningStreak,
-  onOpenReviewWhileListening,
-  onSelectAlbum,
-}) => (
-  <View style={styles.heroCard}>
-    <View style={styles.heroTopRow}>
-      <View style={styles.heroBadge}>
-        <Flame color="#FDBA74" size={14} />
-        <Text style={styles.heroBadgeText}>
-          Racha activa: {listeningStreak.current} dias
+const ListeningBar = ({ currentTrack, onOpenReviewWhileListening, onSelectAlbum }) => (
+  <View style={styles.listeningBar}>
+    <View style={styles.listeningBarInfo}>
+      {currentTrack?.cover ? (
+        <Image source={{ uri: currentTrack.cover }} style={styles.listeningBarCover} />
+      ) : (
+        <View style={styles.listeningBarPlaceholder}>
+          <Headphones color="#A855F7" size={18} />
+        </View>
+      )}
+
+      <View style={styles.listeningBarCopy}>
+        <Text style={styles.listeningBarEyebrow}>AHORA SONANDO</Text>
+        <Text style={styles.listeningBarTitle} numberOfLines={1}>
+          {currentTrack ? currentTrack.title : 'Poné algo y dejá una reseña en caliente'}
+        </Text>
+        <Text style={styles.listeningBarSubtitle} numberOfLines={1}>
+          {currentTrack
+            ? currentTrack.artist
+            : 'El feed queda para la comunidad; esto solo te da un atajo rápido.'}
         </Text>
       </View>
-      <Text style={styles.heroCounter}>
-        {listeningStreak.last7DaysCount} escuchas en 7 dias
-      </Text>
     </View>
 
-    {currentTrack ? (
-      <View style={styles.heroTrackRow}>
-        {currentTrack.cover ? (
-          <Image source={{ uri: currentTrack.cover }} style={styles.heroCover} />
-        ) : (
-          <View style={styles.heroCoverPlaceholder}>
-            <Headphones color="#A855F7" size={22} />
-          </View>
-        )}
-        <View style={styles.heroTrackInfo}>
-          <Text style={styles.heroTrackEyebrow}>SONANDO AHORA</Text>
-          <Text style={styles.heroTrackTitle} numberOfLines={1}>
-            {currentTrack.title}
-          </Text>
-          <Text style={styles.heroTrackArtist} numberOfLines={1}>
-            {currentTrack.artist}
-          </Text>
-        </View>
-      </View>
-    ) : (
-      <View style={styles.heroEmpty}>
-        <Text style={styles.heroTrackEyebrow}>HABITO</Text>
-        <Text style={styles.heroTrackTitle}>Tu streak ya esta corriendo</Text>
-        <Text style={styles.heroTrackArtist}>
-          Reproduce algo y deja una resena mientras escuchas para mantener el
-          loop vivo.
-        </Text>
-      </View>
-    )}
-
-    <View style={styles.heroActions}>
+    <View style={styles.listeningBarActions}>
       <TouchableOpacity
-        style={styles.heroPrimaryButton}
+        style={[
+          styles.listeningPrimaryButton,
+          !currentTrack && styles.listeningButtonDisabled,
+        ]}
         onPress={onOpenReviewWhileListening}
         disabled={!currentTrack}>
-        <Headphones color="white" size={18} />
-        <Text style={styles.heroPrimaryButtonText}>Review while listening</Text>
+        <Headphones color="white" size={16} />
+        <Text style={styles.listeningPrimaryButtonText}>Reseñar</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.heroSecondaryButton}
-        onPress={() => currentTrack && onSelectAlbum(currentTrack)}
-        disabled={!currentTrack}>
-        <Sparkles color="#E9D5FF" size={18} />
-        <Text style={styles.heroSecondaryButtonText}>Abrir ficha</Text>
-      </TouchableOpacity>
+      {currentTrack ? (
+        <TouchableOpacity
+          style={styles.listeningSecondaryButton}
+          onPress={() => onSelectAlbum(currentTrack)}>
+          <Text style={styles.listeningSecondaryButtonText}>Ficha</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   </View>
 );
@@ -220,55 +195,6 @@ const FriendActivityCard = ({ review, onViewProfile }) => (
   </TouchableOpacity>
 );
 
-const InterestingUserCard = ({ user, onViewProfile }) => (
-  <TouchableOpacity
-    style={styles.discoveryUserCard}
-    onPress={() => onViewProfile(user.handle)}>
-    <View style={[styles.avatarBubble, { backgroundColor: user.avatarColor }]}>
-      {user.avatarUrl ? (
-        <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
-      ) : (
-        <UserRound color="white" size={18} />
-      )}
-    </View>
-    <Text style={styles.discoveryUserName}>{user.name}</Text>
-    <Text style={styles.discoveryUserHandle}>@{user.handle}</Text>
-    <Text style={styles.discoveryUserReason} numberOfLines={2}>
-      {user.reason}
-    </Text>
-  </TouchableOpacity>
-);
-
-const InterestingAlbumCard = ({ album, onSelectAlbum, onPlaySong }) => (
-  <TouchableOpacity
-    style={styles.discoveryAlbumCard}
-    onPress={() => onSelectAlbum(album)}>
-    {album.cover ? (
-      <Image source={{ uri: album.cover }} style={styles.discoveryAlbumCover} />
-    ) : (
-      <View style={styles.discoveryAlbumPlaceholder}>
-        <Disc color="#A855F7" size={18} />
-      </View>
-    )}
-    <Text style={styles.discoveryAlbumTitle} numberOfLines={1}>
-      {album.title}
-    </Text>
-    <Text style={styles.discoveryAlbumArtist} numberOfLines={1}>
-      {album.artist}
-    </Text>
-    <Text style={styles.discoveryAlbumReason} numberOfLines={2}>
-      {album.reason}
-    </Text>
-    {album.previewUrl ? (
-      <TouchableOpacity
-        style={styles.discoveryPlayButton}
-        onPress={() => onPlaySong(album)}>
-        <Text style={styles.discoveryPlayButtonText}>Escuchar preview</Text>
-      </TouchableOpacity>
-    ) : null}
-  </TouchableOpacity>
-);
-
 const FeedItem = React.memo(
   ({
     review,
@@ -292,14 +218,14 @@ const FeedItem = React.memo(
         {review.contextType === 'while-listening' ? (
           <View style={styles.contextFlag}>
             <Headphones color="#A855F7" size={14} />
-            <Text style={styles.contextFlagText}>Review while listening</Text>
+            <Text style={styles.contextFlagText}>Mientras suena</Text>
           </View>
         ) : null}
 
         {isScratched ? (
           <View style={styles.repostIndicator}>
             <Disc color="#A855F7" size={14} />
-            <Text style={styles.repostText}>Hiciste scratch a esta resena</Text>
+            <Text style={styles.repostText}>Le hiciste scratch a esta reseña</Text>
           </View>
         ) : null}
 
@@ -398,10 +324,7 @@ const FeedScreen = ({
   reviews,
   currentUserHandle,
   currentTrack,
-  listeningStreak,
   friendActivity,
-  interestingUsers,
-  interestingAlbums,
   hasUnreadMessages,
   hasUnreadNotifications,
   onDeleteReview,
@@ -413,12 +336,11 @@ const FeedScreen = ({
   onOpenNotifications,
   onOpenReviewWhileListening,
   onSelectAlbum,
-  onPlaySong,
 }) => (
   <View style={styles.mainContainer}>
     <View style={styles.headerRow}>
       <View>
-        <Text style={styles.headerEyebrow}>B-SIDE COMMUNITY</Text>
+        <Text style={styles.headerEyebrow}>COMUNIDAD B-SIDE</Text>
         <Text style={styles.headerTitle}>Comunidad</Text>
       </View>
 
@@ -445,9 +367,8 @@ const FeedScreen = ({
       removeClippedSubviews={Platform.OS !== 'web'}
       ListHeaderComponent={
         <>
-          <ListeningPulseCard
+          <ListeningBar
             currentTrack={currentTrack}
-            listeningStreak={listeningStreak}
             onOpenReviewWhileListening={onOpenReviewWhileListening}
             onSelectAlbum={onSelectAlbum}
           />
@@ -455,9 +376,9 @@ const FeedScreen = ({
           {friendActivity.length ? (
             <View style={styles.sectionBlock}>
               <SectionLabel
-                eyebrow="FRIEND ACTIVITY"
-                title="Lo que esta pasando en tu circulo"
-                subtitle="Las ultimas resenas de la gente que sigues."
+                eyebrow="ACTIVIDAD DE AMIGOS"
+                title="Lo que está pasando en tu círculo"
+                subtitle="Las últimas reseñas de la gente que seguís."
               />
               <ScrollView
                 horizontal={true}
@@ -476,8 +397,8 @@ const FeedScreen = ({
 
           <SectionLabel
             eyebrow="FEED"
-            title="Resenas primero"
-            subtitle="Lo mas fuerte de tu circulo y de la comunidad, con el descubrimiento un poco mas abajo."
+            title="Reseñas primero"
+            subtitle="Lo más fuerte de tu círculo y de la comunidad, con el descubrimiento un poco más abajo."
           />
         </>
       }
@@ -492,56 +413,7 @@ const FeedScreen = ({
           onAddReviewComment={onAddReviewComment}
         />
       )}
-      ListFooterComponent={
-        <>
-          {interestingUsers.length ? (
-            <View style={styles.footerDiscoveryBlock}>
-              <SectionLabel
-                eyebrow="USUARIOS INTERESANTES"
-                title="Perfiles para descubrir despues del scroll"
-                subtitle="Afinidad real, actividad reciente y cuentas que pueden sumar a tu radar."
-              />
-              <ScrollView
-                horizontal={true}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalRow}>
-                {interestingUsers.map((user) => (
-                  <InterestingUserCard
-                    key={user.handle}
-                    user={user}
-                    onViewProfile={onViewProfile}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          {interestingAlbums.length ? (
-            <View style={styles.footerDiscoveryBlock}>
-              <SectionLabel
-                eyebrow="DESCUBRIMIENTO"
-                title="Albumes interesantes para vos"
-                subtitle="Ordenados por afinidad, actividad y senales de gusto reales."
-              />
-              <ScrollView
-                horizontal={true}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.horizontalRow}>
-                {interestingAlbums.map((album) => (
-                  <InterestingAlbumCard
-                    key={`${album.id}-${album.title}`}
-                    album={album}
-                    onSelectAlbum={onSelectAlbum}
-                    onPlaySong={onPlaySong}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          <View style={{ height: 120 }} />
-        </>
-      }
+      ListFooterComponent={<View style={{ height: 120 }} />}
     />
   </View>
 );
@@ -594,106 +466,81 @@ const styles = StyleSheet.create({
     borderColor: '#111827',
   },
   feedContent: { paddingHorizontal: 20, paddingBottom: 24 },
-  heroCard: {
-    borderRadius: 26,
-    backgroundColor: 'rgba(7, 10, 18, 0.72)',
+  listeningBar: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(7, 10, 18, 0.68)',
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.14)',
-    padding: 18,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: 16,
     marginBottom: 20,
     gap: 14,
   },
-  heroTopRow: {
+  listeningBarInfo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 12,
     alignItems: 'center',
   },
-  heroBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(249,115,22,0.14)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  heroBadgeText: {
-    color: '#FED7AA',
-    fontWeight: '800',
-    fontSize: 12,
-  },
-  heroCounter: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  heroTrackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  heroCover: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+  listeningBarCover: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.14)',
   },
-  heroCoverPlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
+  listeningBarPlaceholder: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
     backgroundColor: '#111827',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  heroTrackInfo: { flex: 1, gap: 4 },
-  heroTrackEyebrow: {
+  listeningBarCopy: { flex: 1, gap: 3 },
+  listeningBarEyebrow: {
     color: '#C4B5FD',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1,
   },
-  heroTrackTitle: { color: 'white', fontSize: 20, fontWeight: '900' },
-  heroTrackArtist: { color: '#D1D5DB', fontSize: 13, lineHeight: 18 },
-  heroEmpty: { gap: 8 },
-  heroActions: {
+  listeningBarTitle: { color: 'white', fontSize: 16, fontWeight: '900' },
+  listeningBarSubtitle: { color: '#9CA3AF', fontSize: 13, lineHeight: 18 },
+  listeningBarActions: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  heroPrimaryButton: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: 16,
-    backgroundColor: '#8A2BE2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     gap: 10,
   },
-  heroPrimaryButtonText: {
-    color: 'white',
-    fontWeight: '800',
-  },
-  heroSecondaryButton: {
-    minWidth: 120,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(196,181,253,0.18)',
-    backgroundColor: 'rgba(88, 28, 135, 0.14)',
+  listeningPrimaryButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    backgroundColor: '#8A2BE2',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 14,
   },
-  heroSecondaryButtonText: {
-    color: '#E9D5FF',
+  listeningPrimaryButtonText: {
+    color: 'white',
     fontWeight: '800',
+    fontSize: 13,
   },
+  listeningSecondaryButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  listeningSecondaryButtonText: {
+    color: '#E5E7EB',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  listeningButtonDisabled: { opacity: 0.55 },
   sectionBlock: { marginBottom: 22 },
-  footerDiscoveryBlock: { marginTop: 8, marginBottom: 24 },
   sectionLabel: { marginBottom: 14 },
   sectionEyebrow: {
     color: '#A78BFA',
@@ -755,68 +602,6 @@ const styles = StyleSheet.create({
   friendAlbumTitle: { color: 'white', fontWeight: '800', fontSize: 15 },
   friendAlbumArtist: { color: '#9CA3AF', fontSize: 13 },
   friendReviewText: { color: '#E5E7EB', lineHeight: 19, fontSize: 13 },
-  discoveryUserCard: {
-    width: 164,
-    borderRadius: 22,
-    backgroundColor: 'rgba(7, 10, 18, 0.62)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    padding: 14,
-    marginRight: 14,
-    alignItems: 'center',
-    gap: 8,
-  },
-  avatarBubble: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarImage: { width: 62, height: 62, borderRadius: 31 },
-  discoveryUserName: { color: 'white', fontWeight: '900', fontSize: 16 },
-  discoveryUserHandle: { color: '#A78BFA', fontWeight: '700', fontSize: 13 },
-  discoveryUserReason: {
-    color: '#D1D5DB',
-    textAlign: 'center',
-    lineHeight: 18,
-    fontSize: 13,
-  },
-  discoveryAlbumCard: {
-    width: 192,
-    borderRadius: 22,
-    backgroundColor: 'rgba(7, 10, 18, 0.62)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    padding: 14,
-    marginRight: 14,
-    gap: 10,
-  },
-  discoveryAlbumCover: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 18,
-  },
-  discoveryAlbumPlaceholder: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 18,
-    backgroundColor: '#111827',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  discoveryAlbumTitle: { color: 'white', fontWeight: '900', fontSize: 16 },
-  discoveryAlbumArtist: { color: '#9CA3AF', fontSize: 13 },
-  discoveryAlbumReason: { color: '#D1D5DB', lineHeight: 18, fontSize: 13 },
-  discoveryPlayButton: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: 'rgba(168,85,247,0.18)',
-  },
-  discoveryPlayButtonText: { color: '#E9D5FF', fontWeight: '800', fontSize: 12 },
   card: {
     backgroundColor: 'rgba(7, 10, 18, 0.78)',
     padding: 18,
@@ -996,3 +781,4 @@ const styles = StyleSheet.create({
 });
 
 export default FeedScreen;
+

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -14,7 +14,9 @@ import { buildProfileTheme, canDisplayProfileAsset } from '../data/appState';
 const ProfileHero = ({
   user,
   currentTrack,
+  showListeningStatus = true,
   isPublic,
+  avatarFrame,
   onBack,
   onShareProfile,
   onOpenStory,
@@ -27,6 +29,11 @@ const ProfileHero = ({
     user?.avatarModerationStatus,
     !isPublic
   );
+  const resolvedAvatarFrame = avatarFrame || {
+    glowColor: `${theme.accent}44`,
+    ringColor: 'white',
+  };
+  const showPlanBadge = !isPublic && user?.plan === 'plus';
 
   return (
     <View style={styles.hero}>
@@ -76,11 +83,18 @@ const ProfileHero = ({
         ) : null}
       </View>
 
-      <View style={[styles.avatarGlow, { backgroundColor: `${theme.accent}44` }]}>
+      <View
+        style={[
+          styles.avatarGlow,
+          {
+            backgroundColor: resolvedAvatarFrame.glowColor || `${theme.accent}44`,
+          },
+        ]}>
         <View
           style={[
             styles.avatar,
             { backgroundColor: user?.avatarColor || theme.accent },
+            { borderColor: resolvedAvatarFrame.ringColor || 'white' },
           ]}>
           {user?.avatarUrl && showAvatar ? (
             <Image source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
@@ -93,7 +107,7 @@ const ProfileHero = ({
       <Text style={styles.name}>{user?.name}</Text>
       <Text style={[styles.handle, { color: theme.accent }]}>@{user?.handle}</Text>
 
-      {!isPublic ? (
+      {showPlanBadge ? (
         <View style={styles.metaRow}>
           <View
             style={[
@@ -104,18 +118,13 @@ const ProfileHero = ({
               },
             ]}>
             <Text style={styles.planBadgeText}>
-              {user?.plan === 'plus' ? 'Plan Plus' : 'Plan Free'}
+              Plan Plus
             </Text>
           </View>
-          {user?.email ? (
-            <Text style={styles.emailText} numberOfLines={1}>
-              {user.email}
-            </Text>
-          ) : null}
         </View>
       ) : null}
 
-      {!isPublic && currentTrack ? (
+      {!isPublic && showListeningStatus && currentTrack ? (
         <View
           style={[
             styles.nowPlaying,
@@ -132,14 +141,6 @@ const ProfileHero = ({
       ) : null}
 
       <Text style={styles.bio}>{user?.bio}</Text>
-      <Text style={styles.hint}>
-        {isPublic
-          ? 'Este perfil tiene una ambientacion propia.'
-          : user?.avatarModerationStatus === 'pending_review' ||
-              user?.wallpaperModerationStatus === 'pending_review'
-            ? 'Tus imagenes nuevas siguen en revision antes de quedar publicas.'
-            : 'Tu foto, fondo y tema ya quedan guardados en local.'}
-      </Text>
     </View>
   );
 };
@@ -206,6 +207,9 @@ const styles = StyleSheet.create({
   metaRow: {
     marginTop: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: 10,
   },
   planBadge: {
@@ -218,10 +222,6 @@ const styles = StyleSheet.create({
     color: '#F5F3FF',
     fontSize: 12,
     fontWeight: '800',
-  },
-  emailText: {
-    color: '#D1D5DB',
-    maxWidth: 260,
   },
   nowPlaying: {
     flexDirection: 'row',
@@ -246,14 +246,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 20,
   },
-  hint: {
-    color: '#9CA3AF',
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 19,
-    maxWidth: 320,
-    fontSize: 12,
-  },
 });
 
 export default ProfileHero;
+
