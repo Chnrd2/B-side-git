@@ -238,6 +238,7 @@ export default function AppNavigator({ app }) {
             onExportToSpotify={app.exportListToSpotify}
             isSpotifyConnected={Boolean(app.spotifySession?.accessToken)}
             isSpotifyExportBusy={app.isSpotifyExportBusy}
+            spotifyExportStatus={app.spotifyExportStatus}
           />
         )}
       </RootStack.Screen>
@@ -376,6 +377,10 @@ export default function AppNavigator({ app }) {
             authSession={app.authSession}
             authMessage={app.authMessage}
             isAuthBusy={app.isAuthBusy}
+            pushSupportStatus={app.pushSupportStatus}
+            pushPermissionStatus={app.pushPermissionStatus}
+            spotifySession={app.spotifySession}
+            spotifyPlaybackStatus={app.spotifyPlaybackStatus}
             onBack={() => navigation.goBack()}
             onSave={app.saveAuthPreview}
             onRegisterRealAccount={app.registerRealAccount}
@@ -383,6 +388,7 @@ export default function AppNavigator({ app }) {
             onSendMagicLink={app.sendMagicLinkAccess}
             onSignOut={app.signOutBackendAccount}
             onSyncSession={app.refreshAuthenticatedUser}
+            onRequestPushPermissions={app.requestPushPermissions}
           />
         )}
       </RootStack.Screen>

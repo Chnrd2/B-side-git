@@ -456,6 +456,7 @@ export default function useBSideApp() {
   const [spotifySession, setSpotifySession] = useState(null);
   const [spotifyProfile, setSpotifyProfile] = useState(null);
   const [isSpotifyExportBusy, setIsSpotifyExportBusy] = useState(false);
+  const [spotifyExportStatus, setSpotifyExportStatus] = useState(null);
   const [pendingSpotifyExportListId, setPendingSpotifyExportListId] = useState('');
   const [pushPermissionStatus, setPushPermissionStatus] = useState('unknown');
   const [oracleRecommendations, setOracleRecommendations] = useState([]);
@@ -1223,7 +1224,7 @@ export default function useBSideApp() {
         pushNotification({
           type: 'product',
           title: 'Spotify conectado',
-          body: 'Tu cuenta ya quedo lista para exportar listas desde B-Side.',
+          body: 'Tu cuenta ya quedó lista para exportar listas desde B-Side.',
           read: true,
         });
       } else if (callbackResult.message) {
@@ -1422,32 +1423,10 @@ export default function useBSideApp() {
 
     let isMounted = true;
 
-    registerForPushNotifications()
+    syncPushRegistration()
       .then((result) => {
         if (!isMounted) {
           return;
-        }
-
-        setPushPermissionStatus(
-          result.ok ? result.permission || 'granted' : result.permission || 'denied'
-        );
-
-        if (
-          result.ok &&
-          result.token &&
-          authSession?.user?.id &&
-          supabaseStatus.isConfigured
-        ) {
-          void upsertPushDeviceToken({
-            userId: authSession.user.id,
-            token: result.token,
-            platform: result.platform || Platform.OS,
-            projectId: result.projectId || '',
-          }).then((response) => {
-            if (!response.ok && response.message) {
-              setAuthMessage((prevMessage) => prevMessage || response.message);
-            }
-          });
         }
       })
       .catch(() => {
@@ -1746,7 +1725,7 @@ export default function useBSideApp() {
       type: 'product',
       title: 'Tu racha esta en riesgo',
       body:
-        'Todavia puedes salvarla hoy escuchando algo antes de que termine el dia.',
+        'Todavía podés salvarla hoy escuchando algo antes de que termine el día.',
       read: false,
       entityType: 'streak-warning',
       dedupeKey: getLocalDayKey(new Date()),
@@ -1966,6 +1945,68 @@ export default function useBSideApp() {
     };
   };
 
+  const syncPushRegistration = async () => {
+    const result = await registerForPushNotifications();
+
+    setPushPermissionStatus(
+      result.ok
+        ? result.permission || 'granted'
+        : result.permission || (result.skipped ? 'skipped' : 'denied')
+    );
+
+    if (
+      result.ok &&
+      result.token &&
+      authSession?.user?.id &&
+      supabaseStatus.isConfigured
+    ) {
+      const response = await upsertPushDeviceToken({
+        userId: authSession.user.id,
+        token: result.token,
+        platform: result.platform || Platform.OS,
+        projectId: result.projectId || '',
+      });
+
+      if (!response.ok && response.message) {
+        setAuthMessage((prevMessage) => prevMessage || response.message);
+      }
+    }
+
+    return result;
+  };
+
+  const requestPushPermissions = async () => {
+    const result = await syncPushRegistration();
+
+    if (result.ok) {
+      void triggerSuccessFeedback();
+      setAuthMessage(
+        result.isWeb
+          ? 'Avisos del navegador activos.'
+          : 'Avisos del sistema listos en este dispositivo.'
+      );
+
+      if (preferences.notificationsEnabled) {
+        await sendLocalNotification({
+          title: 'Avisos listos',
+          body: result.isWeb
+            ? 'B-Side ya puede avisarte desde este navegador.'
+            : 'Este dispositivo ya quedó listo para recibir avisos de B-Side.',
+          data: {
+            type: 'push-ready',
+          },
+        });
+      }
+    } else if (!result.skipped) {
+      void triggerWarningFeedback();
+      setAuthMessage(
+        result.message || 'No pudimos activar los avisos del sistema.'
+      );
+    }
+
+    return result;
+  };
+
   const connectSpotifyAccount = async (options = {}) => {
     if (!spotifyStatus.isConfigured) {
       Alert.alert(
@@ -2007,6 +2048,18 @@ export default function useBSideApp() {
 
     if (!list) {
       void triggerWarningFeedback();
+      setSpotifyExportStatus({
+        listId,
+        status: 'error',
+        title: 'Lista no disponible',
+        message: 'Esperá a que termine de cargar y volvé a intentar.',
+        matchedCount: 0,
+        missingCount: 0,
+        albumSeedCount: 0,
+        unmatchedTracks: [],
+        playlistUrl: '',
+        updatedAt: new Date().toISOString(),
+      });
       Alert.alert(
         'Todavía no cargamos esa lista',
         'Esperá un segundo y volvé a intentar la exportación.'
@@ -2016,6 +2069,20 @@ export default function useBSideApp() {
 
     if (!spotifySession?.accessToken) {
       void triggerSelectionFeedback();
+      setSpotifyExportStatus({
+        listId,
+        status: 'pending-connection',
+        title: 'Conectá Spotify',
+        message: 'Primero vinculá tu cuenta para crear esta playlist en Spotify.',
+        matchedCount: 0,
+        missingCount: list.items.length,
+        albumSeedCount: 0,
+        unmatchedTracks: list.items
+          .slice(0, 3)
+          .map((item) => `${item.title} · ${item.artist}`),
+        playlistUrl: '',
+        updatedAt: new Date().toISOString(),
+      });
       const connected = await connectSpotifyAccount({ pendingListId: listId });
       return connected;
     }
@@ -2028,11 +2095,41 @@ export default function useBSideApp() {
 
       if (!result.ok) {
         void triggerErrorFeedback();
+        setSpotifyExportStatus({
+          listId,
+          status: 'error',
+          title: 'No pudimos crear la playlist',
+          message: result.message,
+          matchedCount: 0,
+          missingCount: list.items.length,
+          albumSeedCount: 0,
+          unmatchedTracks: list.items
+            .slice(0, 3)
+            .map((item) => `${item.title} · ${item.artist}`),
+          playlistUrl: '',
+          updatedAt: new Date().toISOString(),
+        });
         Alert.alert('No pudimos exportar la lista', result.message);
         return false;
       }
 
       void triggerSuccessFeedback();
+      setSpotifyExportStatus({
+        listId,
+        status: 'success',
+        title: 'Playlist lista',
+        message:
+          result.missingCount > 0
+            ? 'Spotify armó la playlist, pero dejó algunos discos afuera.'
+            : 'La playlist ya quedó lista en tu cuenta.',
+        matchedCount: result.matchedCount,
+        missingCount: result.missingCount,
+        albumSeedCount: result.albumSeedCount,
+        directMatchCount: result.directMatchCount,
+        unmatchedTracks: (result.unmatchedTracks || []).slice(0, 3),
+        playlistUrl: result.playlist?.external_urls?.spotify || '',
+        updatedAt: new Date().toISOString(),
+      });
 
       pushNotification({
         type: 'product',
@@ -2167,7 +2264,7 @@ export default function useBSideApp() {
       return {
         ok: false,
         skipped: true,
-        message: 'Supabase todavia no esta conectado a una sesion activa.',
+        message: 'Supabase todavía no está conectado a una sesión activa.',
       };
     }
 
@@ -2253,7 +2350,7 @@ export default function useBSideApp() {
     if (!supabaseStatus.isConfigured) {
       return {
         ok: false,
-        message: 'Supabase todavia no esta configurado.',
+        message: 'Supabase todavía no está configurado.',
       };
     }
 
@@ -3262,7 +3359,7 @@ export default function useBSideApp() {
     pushNotification({
       type: 'security',
       title: 'Registro iniciado',
-      body: 'Tu cuenta real quedo creada. Revisa el mail si Supabase pide confirmacion.',
+      body: 'Tu cuenta real quedó creada. Revisá el mail si Supabase pide confirmación.',
       read: true,
     });
 
@@ -3302,11 +3399,11 @@ export default function useBSideApp() {
     if (refreshResult.ok && refreshResult.session?.user) {
       pushNotification({
         type: 'security',
-        title: 'Sesion iniciada',
-        body: 'Tu cuenta real ya quedo activa en esta demo.',
+        title: 'Sesión iniciada',
+        body: 'Tu cuenta real ya quedó activa en esta demo.',
         read: true,
       });
-      setAuthMessage('Sesion iniciada.');
+      setAuthMessage('Sesión iniciada.');
     }
 
     setIsAuthBusy(false);
@@ -3337,7 +3434,7 @@ export default function useBSideApp() {
       pushNotification({
         type: 'security',
         title: 'Magic link enviado',
-        body: 'Revisa tu email para continuar el acceso.',
+        body: 'Revisá tu email para continuar el acceso.',
         read: true,
       });
       setAuthMessage('Magic link enviado.');
@@ -3369,11 +3466,11 @@ export default function useBSideApp() {
         ...prevPreferences,
         sessionMode: 'guest',
       }));
-      setAuthMessage('Sesion cerrada.');
+      setAuthMessage('Sesión cerrada.');
       pushNotification({
         type: 'security',
-        title: 'Sesion cerrada',
-        body: 'La cuenta real se desconecto de este dispositivo.',
+        title: 'Sesión cerrada',
+        body: 'La cuenta real se desconectó de este dispositivo.',
         read: true,
       });
     } else {
@@ -4475,6 +4572,7 @@ export default function useBSideApp() {
     isAuthBusy,
     isProfileSaving,
     isSpotifyExportBusy,
+    spotifyExportStatus,
     isBackendConfigured: supabaseStatus.isConfigured,
     spotifyStatus,
     spotifyPlaybackStatus,
@@ -4522,6 +4620,7 @@ export default function useBSideApp() {
     connectSpotifyAccount,
     disconnectSpotifyAccount,
     exportListToSpotify,
+    requestPushPermissions,
     runMusicOracle,
     setFreemiumPlan,
     markNotificationsAsRead,

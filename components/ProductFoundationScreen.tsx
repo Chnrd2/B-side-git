@@ -150,10 +150,12 @@ const ProductFoundationScreen = ({
           <Text style={styles.snapshotText}>
             Push del sistema:{' '}
             {pushPermissionStatus === 'granted'
-              ? 'permisos activos'
-              : pushSupportStatus?.isWeb
-                ? 'permiso del navegador pendiente'
-                : 'permiso pendiente o dispositivo no listo'}
+              ? 'listo en este dispositivo'
+              : pushSupportStatus?.needsDevBuild
+                ? 'listo para cerrar en dev build'
+                : pushSupportStatus?.isWeb
+                  ? 'permiso del navegador pendiente'
+                  : 'permiso pendiente o dispositivo no listo'}
           </Text>
           <Text style={styles.snapshotText}>
             Personalización: {theme.presetName}
@@ -252,11 +254,11 @@ const ProductFoundationScreen = ({
             <Text style={styles.roadmapTitle}>Siguiente bloque recomendado</Text>
           </View>
           <Text style={styles.roadmapText}>
-            1. Mostrar una vista previa del export a Spotify antes de crear la
-            playlist. 2. Llevar las push remotas a Android con dev build. 3.
-            Afinar descubrir con artistas relacionados y hubs por artista. 4.
-            Mejorar el Oráculo con prompts y señales más finas. 5. Definir qué
-            queda en Free y qué entra en Plus.
+            1. Probar el checklist de release en iPhone y Android. 2. Cerrar
+            push remota real con dev build y dispositivo físico. 3. Afinar el
+            playback donde Spotify no trae preview. 4. Mejorar el export a
+            Spotify con más transparencia. 5. Recién después, sumar discovery
+            más fino y hubs por artista.
           </Text>
         </View>
 

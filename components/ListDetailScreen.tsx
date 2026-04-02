@@ -2,6 +2,7 @@
 import {
   FlatList,
   Image,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -33,6 +34,7 @@ const ListDetailScreen = ({
   onExportToSpotify,
   isSpotifyConnected,
   isSpotifyExportBusy,
+  spotifyExportStatus,
 }) => {
   if (!list) return null;
 
@@ -64,6 +66,8 @@ const ListDetailScreen = ({
     list.items[0] ||
     null;
   const preferredPlaybackState = getPlaybackState(preferredPlaybackItem || {});
+  const exportSummary =
+    spotifyExportStatus?.listId === list.id ? spotifyExportStatus : null;
 
   return (
     <View style={styles.container}>
@@ -179,6 +183,47 @@ const ListDetailScreen = ({
                 : 'Vincular Spotify'}
           </Text>
         </TouchableOpacity>
+        <Text style={styles.spotifyExportHint}>
+          Si hace falta, B-Side usa un tema representativo por cada disco para armar la playlist.
+        </Text>
+
+        {exportSummary ? (
+          <View
+            style={[
+              styles.exportStatusCard,
+              exportSummary.status === 'success'
+                ? styles.exportStatusCardSuccess
+                : exportSummary.status === 'pending-connection'
+                  ? styles.exportStatusCardPending
+                : styles.exportStatusCardError,
+            ]}>
+            <Text style={styles.exportStatusTitle}>{exportSummary.title}</Text>
+            <Text style={styles.exportStatusText}>{exportSummary.message}</Text>
+            <Text style={styles.exportStatusMeta}>
+              {exportSummary.matchedCount || 0} adentro ·{' '}
+              {exportSummary.missingCount || 0} afuera
+              {exportSummary.albumSeedCount
+                ? ` · ${exportSummary.albumSeedCount} por track representativo`
+                : ''}
+            </Text>
+
+            {exportSummary.unmatchedTracks?.length ? (
+              <Text style={styles.exportStatusHint} numberOfLines={3}>
+                No entraron: {exportSummary.unmatchedTracks.join(', ')}
+              </Text>
+            ) : null}
+
+            {exportSummary.playlistUrl ? (
+              <TouchableOpacity
+                style={styles.exportStatusButton}
+                onPress={() => {
+                  void Linking.openURL(exportSummary.playlistUrl);
+                }}>
+                <Text style={styles.exportStatusButtonText}>Abrir playlist</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       {list.items.length === 0 ? (
@@ -368,6 +413,67 @@ const styles = StyleSheet.create({
     color: '#F5E8FF',
     fontWeight: '800',
     fontSize: 13,
+  },
+  spotifyExportHint: {
+    marginTop: 10,
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 18,
+    maxWidth: 320,
+  },
+  exportStatusCard: {
+    marginTop: 14,
+    width: '100%',
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    gap: 8,
+  },
+  exportStatusCardSuccess: {
+    backgroundColor: 'rgba(88,28,135,0.16)',
+    borderColor: 'rgba(168,85,247,0.22)',
+  },
+  exportStatusCardError: {
+    backgroundColor: 'rgba(127,29,29,0.18)',
+    borderColor: 'rgba(248,113,113,0.22)',
+  },
+  exportStatusCardPending: {
+    backgroundColor: 'rgba(30,41,59,0.5)',
+    borderColor: 'rgba(196,181,253,0.18)',
+  },
+  exportStatusTitle: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  exportStatusText: {
+    color: '#E5E7EB',
+    lineHeight: 20,
+  },
+  exportStatusMeta: {
+    color: '#C4B5FD',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  exportStatusHint: {
+    color: '#CBD5E1',
+    lineHeight: 19,
+    fontSize: 12,
+  },
+  exportStatusButton: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  exportStatusButtonText: {
+    color: '#F5F3FF',
+    fontWeight: '800',
   },
   emptyContainer: {
     flex: 1,

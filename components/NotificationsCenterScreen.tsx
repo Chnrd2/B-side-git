@@ -73,7 +73,7 @@ const NotificationsCenterScreen = ({
                       <Text style={styles.notificationTitle}>
                         {notification.title}
                       </Text>
-                      {!notification.read && <View style={styles.unreadDot} />}
+                      {!notification.read ? <View style={styles.unreadDot} /> : null}
                     </View>
                     <Text style={styles.notificationText}>{notification.body}</Text>
                     <Text style={styles.notificationTime}>

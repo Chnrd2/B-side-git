@@ -30,12 +30,78 @@ import {
   getSupabaseStatus,
 } from '../lib/supabase';
 
+const getPushCopy = (pushSupportStatus, pushPermissionStatus) => {
+  if (pushSupportStatus?.isWeb) {
+    return pushPermissionStatus === 'granted'
+      ? {
+          title: 'Avisos web activos',
+          detail: 'Este navegador ya puede mostrar avisos de B-Side.',
+          action: 'Probar avisos',
+        }
+      : {
+          title: 'Permiso web pendiente',
+          detail: 'Activá los avisos del navegador para no perder mensajes ni actividad.',
+          action: 'Activar avisos',
+        };
+  }
+
+  if (pushSupportStatus?.isExpoGoAndroid) {
+    return {
+      title: 'Push remota pendiente',
+      detail: 'En Expo Go Android dejamos lista la base, pero la prueba real va mejor en una dev build.',
+      action: 'Revisar estado',
+    };
+  }
+
+  if (!pushSupportStatus?.isDevice) {
+    return {
+      title: 'Dispositivo no listo',
+      detail: 'Las push remotas se validan mejor en un teléfono real.',
+      action: 'Revisar estado',
+    };
+  }
+
+  if (pushPermissionStatus === 'granted') {
+    return {
+      title: 'Dispositivo listo',
+      detail: 'Este teléfono ya puede recibir avisos de mensajes, likes y racha.',
+      action: 'Probar avisos',
+    };
+  }
+
+  return {
+    title: 'Permiso pendiente',
+    detail: 'Dale permiso a B-Side para cerrar el circuito de avisos del sistema.',
+    action: 'Activar avisos',
+  };
+};
+
+const getDeviceLabel = (pushSupportStatus) => {
+  if (pushSupportStatus?.isWeb) return 'Web';
+  if (pushSupportStatus?.isExpoGoAndroid) return 'Expo Go Android';
+  if (pushSupportStatus?.isDevice) return 'Dispositivo real';
+  return 'Simulador o emulador';
+};
+
+const getPermissionLabel = (pushPermissionStatus) => {
+  if (pushPermissionStatus === 'granted') return 'activo';
+  if (pushPermissionStatus === 'denied') return 'denegado';
+  if (pushPermissionStatus === 'skipped') return 'pendiente de dev build';
+  if (pushPermissionStatus === 'disabled') return 'desactivado en preferencias';
+  if (pushPermissionStatus === 'error') return 'con error';
+  return 'pendiente';
+};
+
 const AuthPreviewScreen = ({
   currentUser,
   preferences,
   authSession,
   authMessage,
   isAuthBusy,
+  pushSupportStatus,
+  pushPermissionStatus,
+  spotifySession,
+  spotifyPlaybackStatus,
   onBack,
   onSave,
   onRegisterRealAccount,
@@ -43,12 +109,17 @@ const AuthPreviewScreen = ({
   onSendMagicLink,
   onSignOut,
   onSyncSession,
+  onRequestPushPermissions,
 }) => {
   const [name, setName] = useState(currentUser.name || '');
   const [email, setEmail] = useState(currentUser.email || '');
   const [password, setPassword] = useState('');
 
   const supabaseStatus = useMemo(() => getSupabaseStatus(), []);
+  const pushCopy = useMemo(
+    () => getPushCopy(pushSupportStatus, pushPermissionStatus),
+    [pushPermissionStatus, pushSupportStatus]
+  );
 
   const handleSaveLocal = () => {
     onSave({
@@ -61,7 +132,7 @@ const AuthPreviewScreen = ({
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail) {
-      Alert.alert('Falta email', 'Escribe un email para seguir.');
+      Alert.alert('Falta email', 'Escribí un email para seguir.');
       return;
     }
 
@@ -86,7 +157,7 @@ const AuthPreviewScreen = ({
         'Registro iniciado',
         response.data?.session?.user
           ? 'La cuenta quedó conectada y lista para usarse.'
-          : 'Revisa tu mail para confirmar la cuenta real.'
+          : 'Revisá tu mail para confirmar la cuenta real.'
       );
       return;
     }
@@ -153,6 +224,29 @@ const AuthPreviewScreen = ({
     Alert.alert('Sesión cerrada', 'La cuenta real se desconectó.');
   };
 
+  const handleRequestPush = async () => {
+    const result = await onRequestPushPermissions?.();
+
+    if (!result) {
+      return;
+    }
+
+    if (result.ok) {
+      Alert.alert(
+        'Avisos listos',
+        result.isWeb
+          ? 'Este navegador ya quedó listo para mostrar avisos de B-Side.'
+          : 'Este dispositivo ya quedó listo para recibir avisos de B-Side.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      result.skipped ? 'Todavía falta un paso' : 'No pudimos activar los avisos',
+      result.message || 'Probá otra vez en un rato.'
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -170,10 +264,10 @@ const AuthPreviewScreen = ({
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
           <Text style={styles.eyebrow}>CUENTAS Y DATOS</Text>
-          <Text style={styles.title}>Acceso, cuenta y datos</Text>
+          <Text style={styles.title}>Cuenta, sesión y dispositivo</Text>
           <Text style={styles.subtitle}>
-            Esta base te permite tener acceso real, perfiles, reseñas,
-            listas, likes y permisos por usuario sin volver pesada la app.
+            Desde acá podés cerrar el acceso real, ver en qué estado está el
+            dispositivo y revisar si Spotify y los avisos del sistema ya están listos.
           </Text>
         </View>
 
@@ -181,24 +275,50 @@ const AuthPreviewScreen = ({
           <View style={styles.statusRow}>
             <Sparkles color="#E9D5FF" size={18} />
             <Text style={styles.statusTitle}>
-              Estado: {supabaseStatus.isConfigured ? 'configurado' : 'pendiente'}
+              {supabaseStatus.isConfigured ? 'Base conectada' : 'Base pendiente'}
             </Text>
           </View>
           <Text style={styles.statusText}>
-            Proyecto conectado: {supabaseStatus.projectHost}
+            Proyecto: {supabaseStatus.projectHost}
           </Text>
           <Text style={styles.statusText}>
-            Sesión:{' '}
+            Sesión real:{' '}
             {authSession?.user
               ? `activa como ${authSession.user.email || currentUser.email}`
-              : 'sin login real'}
+              : 'todavía no conectada'}
           </Text>
           <Text style={styles.statusText}>
-            Modo local:{' '}
+            Modo visible:{' '}
             {preferences.sessionMode === 'authenticated'
               ? 'autenticado'
               : preferences.sessionMode}
           </Text>
+          <Text style={styles.statusText}>
+            Spotify export:{' '}
+            {spotifySession?.accessToken ? 'cuenta conectada' : 'pendiente'}
+          </Text>
+          <Text style={styles.statusText}>
+            Playback completo:{' '}
+            {spotifyPlaybackStatus?.label || 'pendiente'}
+          </Text>
+        </View>
+
+        <View style={styles.deviceCard}>
+          <Text style={styles.cardTitle}>Este dispositivo</Text>
+          <Text style={styles.cardText}>
+            Entorno actual: {getDeviceLabel(pushSupportStatus)}.
+          </Text>
+          <Text style={styles.deviceStatusTitle}>{pushCopy.title}</Text>
+          <Text style={styles.cardText}>{pushCopy.detail}</Text>
+          <Text style={styles.deviceMeta}>
+            Permiso actual: {getPermissionLabel(pushPermissionStatus)}
+          </Text>
+          <TouchableOpacity
+            style={styles.deviceButton}
+            onPress={handleRequestPush}
+            disabled={isAuthBusy}>
+            <Text style={styles.deviceButtonText}>{pushCopy.action}</Text>
+          </TouchableOpacity>
         </View>
 
         {!supabaseStatus.isConfigured ? (
@@ -254,9 +374,8 @@ const AuthPreviewScreen = ({
         <View style={styles.formCard}>
           <Text style={styles.cardTitle}>Cuenta actual</Text>
           <Text style={styles.cardText}>
-            Si la conexión ya está activa, podés registrar, iniciar
-            sesión y sincronizar tu perfil. Si no, igual podés seguir
-            usando el modo local.
+            Si la conexión ya está activa, podés registrar, iniciar sesión y
+            sincronizar tu perfil. Si no, igual podés seguir usando el modo local.
           </Text>
 
           <View style={styles.inputGroup}>
@@ -299,7 +418,11 @@ const AuthPreviewScreen = ({
             style={styles.primaryButton}
             onPress={handleSaveLocal}
             disabled={isAuthBusy}>
-            <Text style={styles.primaryText}>Guardar datos locales</Text>
+            {isAuthBusy ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.primaryText}>Guardar datos locales</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -317,14 +440,22 @@ const AuthPreviewScreen = ({
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={isAuthBusy}>
-            <Text style={styles.loginText}>Iniciar sesión</Text>
+            {isAuthBusy ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.loginText}>Iniciar sesión</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.ghostButton}
             onPress={handleMagicLink}
             disabled={isAuthBusy}>
-            <Text style={styles.ghostText}>Enviar acceso por mail</Text>
+            {isAuthBusy ? (
+              <ActivityIndicator color="#E9D5FF" />
+            ) : (
+              <Text style={styles.ghostText}>Enviar acceso por mail</Text>
+            )}
           </TouchableOpacity>
 
           {authSession?.user ? (
@@ -332,7 +463,11 @@ const AuthPreviewScreen = ({
               style={styles.syncButton}
               onPress={() => onSyncSession()}
               disabled={isAuthBusy}>
-              <Text style={styles.syncText}>Sincronizar perfil ahora</Text>
+              {isAuthBusy ? (
+                <ActivityIndicator color="#E5E7EB" />
+              ) : (
+                <Text style={styles.syncText}>Sincronizar perfil ahora</Text>
+              )}
             </TouchableOpacity>
           ) : null}
 
@@ -341,8 +476,14 @@ const AuthPreviewScreen = ({
               style={styles.signOutButton}
               onPress={handleSignOut}
               disabled={isAuthBusy}>
-              <LogOut color="white" size={18} />
-              <Text style={styles.signOutText}>Cerrar sesión</Text>
+              {isAuthBusy ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <>
+                  <LogOut color="white" size={18} />
+                  <Text style={styles.signOutText}>Cerrar sesión</Text>
+                </>
+              )}
             </TouchableOpacity>
           ) : null}
 
@@ -445,6 +586,38 @@ const styles = StyleSheet.create({
   },
   statusTitle: { color: 'white', fontSize: 18, fontWeight: '800' },
   statusText: { color: '#D1D5DB', lineHeight: 20 },
+  deviceCard: {
+    backgroundColor: '#0A0A0A',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
+    padding: 18,
+    gap: 10,
+  },
+  deviceStatusTitle: {
+    color: 'white',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  deviceMeta: {
+    color: '#A78BFA',
+    fontWeight: '700',
+  },
+  deviceButton: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: '#111827',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.26)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  deviceButtonText: {
+    color: '#E9D5FF',
+    fontWeight: '800',
+    fontSize: 15,
+  },
   summaryCard: {
     backgroundColor: '#0A0A0A',
     borderRadius: 24,
