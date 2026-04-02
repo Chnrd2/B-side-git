@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -15,11 +14,8 @@ import {
 } from 'react-native';
 import {
   ChevronLeft,
-  Phone,
-  Plus,
   Send,
   Settings,
-  Video,
   X,
 } from 'lucide-react-native';
 import { triggerSelectionFeedback } from '../lib/feedback';
@@ -82,22 +78,6 @@ const ChatScreen = ({
     setInputText('');
   };
 
-  const handleShareAlbum = () => {
-    onSendMessage(chat.id, {
-      messageType: 'recommendation',
-      text: 'Te dejé esta recomendación.',
-      albumId: 'demo-recommendation-1',
-      albumCover:
-        'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2b/3e/2e/2b3e2e5c-9c9e-0e9e-5e5e-5e5e5e5e5e5e/196362125692.jpg/600x600bb.jpg',
-      albumTitle: 'Malos Cantores',
-      albumArtist: 'C.R.O',
-      previewUrl: '',
-      recommendationNote: 'El track 4 es un palo. Dale play de punta a punta.',
-      recommendationReason: 'Te puede entrar perfecto por el costado del trap.',
-      ctaLabel: 'Abrir álbum',
-    });
-  };
-
   const toggleReaction = (messageId) => {
     setReactions((prev) => ({
       ...prev,
@@ -118,16 +98,6 @@ const ChatScreen = ({
     if (normalizedHandle !== '@') {
       onOpenProfile?.(normalizedHandle);
     }
-  };
-
-  const handleHeaderPlaceholder = (mode) => {
-    void triggerSelectionFeedback();
-    Alert.alert(
-      mode === 'call' ? 'Llamadas en preparación' : 'Video en preparación',
-      mode === 'call'
-        ? 'La base del chat ya está lista. El siguiente paso es sumar llamadas con audio real.'
-        : 'La interfaz ya contempla video, pero falta integrar el flujo real de videollamada.'
-    );
   };
 
   const renderMessage = ({ item }) => {
@@ -250,18 +220,6 @@ const ChatScreen = ({
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={() => handleHeaderPlaceholder('call')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Phone color="white" size={20} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => handleHeaderPlaceholder('video')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Video color="white" size={20} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
             onPress={() => {
               void triggerSelectionFeedback();
               setIsBgMenuVisible(true);
@@ -291,9 +249,6 @@ const ChatScreen = ({
               borderTopColor: shellStyles.borderColor,
             },
           ]}>
-          <TouchableOpacity style={styles.attachBtn} onPress={handleShareAlbum}>
-            <Plus color="#A855F7" size={26} />
-          </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder="Escribí un mensaje..."
@@ -461,7 +416,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     alignItems: 'center',
   },
-  attachBtn: { padding: 10, marginRight: 5 },
   input: {
     flex: 1,
     backgroundColor: '#111',

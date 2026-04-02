@@ -63,7 +63,7 @@ const ShareStoryCard = ({ visible, onClose, albums = [], username, user }) => {
   if (!visible) return null;
 
   const theme = buildProfileTheme(user);
-  const topFive = [...albums.slice(0, 5)];
+  const topFive = [...albums.filter(Boolean).slice(0, 5)];
 
   while (topFive.length < 5) {
     topFive.push(null);

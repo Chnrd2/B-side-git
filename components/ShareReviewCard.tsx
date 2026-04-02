@@ -3,13 +3,14 @@ import {
   Dimensions,
   Image,
   Modal,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Disc, Instagram, Sparkles, X } from 'lucide-react-native';
+import { Disc, Share2, Sparkles, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { buildProfileTheme } from '../data/appState';
@@ -23,11 +24,38 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
 
   const theme = buildProfileTheme(user);
   const profileInitial = (user?.name || 'B').charAt(0).toUpperCase();
+  const topCount = Array.isArray(user?.top5) ? user.top5.filter(Boolean).length : 0;
+  const reviewTitle = review?.album || review?.albumTitle || 'Sin última reseña todavía';
+  const reviewQuote =
+    review?.text || 'Perfil listo para descubrir música nueva.';
   const profileStats = [
-    `${user?.plan === 'plus' ? 'Plus' : 'Free'} plan`,
-    `${Array.isArray(user?.top5) ? user.top5.length : 0}/5 top`,
-    review?.album ? 'Última reseña lista' : 'Perfil listo para compartir',
-  ];
+    user?.plan === 'plus' ? 'Plan Plus' : null,
+    `${topCount}/5 top`,
+    review?.album || review?.albumTitle
+      ? 'Última reseña lista'
+      : 'Perfil listo para compartir',
+  ].filter(Boolean);
+  const shareSummary = [
+    `${user?.name || 'B-Side'} en B-Side`,
+    `@${user?.handle || review?.user || 'bside'}`,
+    review?.album || review?.albumTitle
+      ? `Última reseña: ${reviewTitle}`
+      : 'Perfil listo para compartir',
+    review?.text ? `"${review.text}"` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: `${user?.name || 'B-Side'} · B-Side`,
+        message: shareSummary,
+      });
+    } catch (error) {
+      console.warn('No pudimos abrir el share del perfil:', error);
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -148,11 +176,9 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
                     ACTIVIDAD RECIENTE
                   </Text>
                 </View>
-                <Text style={styles.reviewHighlightTitle}>
-                  {review?.album || 'Sin última reseña todavía'}
-                </Text>
+                <Text style={styles.reviewHighlightTitle}>{reviewTitle}</Text>
                 <Text style={styles.quote} numberOfLines={3}>
-                  "{review?.text || 'Perfil listo para descubrir música nueva.'}"
+                  "{reviewQuote}"
                 </Text>
               </View>
             </LinearGradient>
@@ -160,9 +186,9 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
 
           <TouchableOpacity
             style={[styles.shareBtn, { borderColor: `${theme.accent}55` }]}
-            onPress={() => alert('Abriendo Instagram Stories...')}>
-            <Instagram color="white" size={22} />
-            <Text style={styles.shareBtnText}>Compartir en IG</Text>
+            onPress={() => void handleShare()}>
+            <Share2 color="white" size={22} />
+            <Text style={styles.shareBtnText}>Compartir perfil</Text>
           </TouchableOpacity>
         </View>
       </View>

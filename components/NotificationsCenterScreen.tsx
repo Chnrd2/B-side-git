@@ -29,6 +29,10 @@ const NotificationsCenterScreen = ({
   onMarkAllRead,
   onDismiss,
 }) => {
+  const hasUnreadNotifications = notifications.some(
+    (notification) => !notification.read
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -36,8 +40,16 @@ const NotificationsCenterScreen = ({
           <ChevronLeft color="white" size={24} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notificaciones</Text>
-        <TouchableOpacity onPress={onMarkAllRead}>
-          <Text style={styles.markAllText}>Marcar todo</Text>
+        <TouchableOpacity
+          onPress={onMarkAllRead}
+          disabled={!hasUnreadNotifications}>
+          <Text
+            style={[
+              styles.markAllText,
+              !hasUnreadNotifications && styles.markAllTextDisabled,
+            ]}>
+            {hasUnreadNotifications ? 'Marcar todo' : 'Todo leído'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -127,6 +139,9 @@ const styles = StyleSheet.create({
   markAllText: {
     color: '#E9D5FF',
     fontWeight: '700',
+  },
+  markAllTextDisabled: {
+    color: '#6B7280',
   },
   content: {
     paddingHorizontal: 20,

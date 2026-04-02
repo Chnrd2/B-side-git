@@ -263,7 +263,7 @@ const SearchScreen = ({
     void triggerSelectionFeedback();
     const didRefresh = await onRunOracle?.(trimmedQuery);
 
-    if (didRefresh && isSearching) {
+    if (didRefresh) {
       setQuery('');
     }
   };
