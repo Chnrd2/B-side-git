@@ -43,7 +43,11 @@ export default function App() {
           <Text style={styles.splashSubtitle}>
             Cargando perfil, listas, actividad y tu última sesión.
           </Text>
-          <ActivityIndicator color="#A855F7" size="large" style={styles.splashSpinner} />
+          <ActivityIndicator
+            color="#A855F7"
+            size="large"
+            style={styles.splashSpinner}
+          />
         </View>
       </SafeAreaProvider>
     );
@@ -54,7 +58,16 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={styles.mainContainer}>
           <StatusBar barStyle="light-content" backgroundColor="#050816" />
-          <OnboardingScreen onContinue={() => app.completeOnboarding('guest')} />
+          <OnboardingScreen
+            currentUser={app.currentUser}
+            authMessage={app.authMessage}
+            isAuthBusy={app.isAuthBusy}
+            isBackendConfigured={app.isBackendConfigured}
+            onContinueGuest={() => app.completeOnboarding('guest')}
+            onRegisterRealAccount={app.registerRealAccount}
+            onSignInRealAccount={app.signInRealAccount}
+            onSendMagicLink={app.sendMagicLinkAccess}
+          />
         </SafeAreaView>
       </SafeAreaProvider>
     );
