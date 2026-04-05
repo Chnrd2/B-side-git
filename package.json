@@ -47,5 +47,17 @@
   "devDependencies": {
     "gh-pages": "^6.3.0"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "expo-av",
+          "expo-modules-core",
+          "expo-image-loader"
+        ],
+        "listUnknownPackages": false
+      }
+    }
+  }
 }

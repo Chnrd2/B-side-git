@@ -130,6 +130,13 @@ const AuthPreviewScreen = ({
 
   const handleRegister = async () => {
     const trimmedEmail = email.trim().toLowerCase();
+    const fallbackHandle =
+      `${name || trimmedEmail.split('@')[0] || 'tu_lado_b'}`
+        .trim()
+        .toLowerCase()
+        .replace(/^@+/, '')
+        .replace(/[^a-z0-9._]/g, '')
+        .slice(0, 20) || 'tu_lado_b';
 
     if (!trimmedEmail) {
       Alert.alert('Falta email', 'Escribí un email para seguir.');
@@ -148,6 +155,8 @@ const AuthPreviewScreen = ({
 
     const response = await onRegisterRealAccount({
       name,
+      handle: fallbackHandle,
+      birthDate: '2000-01-01',
       email: trimmedEmail,
       password,
     });
@@ -157,7 +166,7 @@ const AuthPreviewScreen = ({
         'Registro iniciado',
         response.data?.session?.user
           ? 'La cuenta quedó conectada y lista para usarse.'
-          : 'Revisá tu mail para confirmar la cuenta real.'
+          : 'Revisá tu email para confirmar la cuenta real.'
       );
       return;
     }
@@ -204,8 +213,8 @@ const AuthPreviewScreen = ({
 
     if (response.ok) {
       Alert.alert(
-        'Acceso por mail enviado',
-        'Buscá el mail de acceso rápido para continuar.'
+        'Acceso por email enviado',
+        'Buscá el email de acceso rápido para continuar.'
       );
       return;
     }
@@ -366,7 +375,7 @@ const AuthPreviewScreen = ({
           <View style={styles.summaryRow}>
             <LockKeyhole color="#E9D5FF" size={18} />
             <Text style={styles.summaryText}>
-              Email, contraseña, acceso por mail y guardado de avatar y fondos.
+              Email, contraseña, acceso por email y guardado de avatar y fondos.
             </Text>
           </View>
         </View>

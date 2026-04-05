@@ -1,4 +1,4 @@
-export const CURRENT_USER_HANDLE = '@marianitooo';
+export const CURRENT_USER_HANDLE = '@tu_lado_b';
 
 export const PROFILE_THEME_PRESETS = [
   {
@@ -100,9 +100,10 @@ const DEFAULT_THEME_PRESET = PROFILE_THEME_PRESETS[0];
 
 export const DEFAULT_CURRENT_USER = {
   id: 'user-me',
-  name: 'Marianitooo',
-  handle: 'marianitooo',
+  name: 'Tu lado B',
+  handle: 'tu_lado_b',
   email: '',
+  birthDate: '',
   plan: 'free',
   bio: 'B-Side Lab | Trap, drill y discos para escuchar de punta a punta.',
   avatarUrl: '',
@@ -232,6 +233,7 @@ export const normalizeUser = (user = {}) => {
     ...baseUser,
     handle: baseUser.handle.replace('@', '') || DEFAULT_CURRENT_USER.handle,
     avatarColor: baseUser.avatarColor || createRandomColor(),
+    birthDate: baseUser.birthDate || '',
     avatarModerationStatus:
       baseUser.avatarModerationStatus || DEFAULT_CURRENT_USER.avatarModerationStatus,
     themePreset: theme.id,
@@ -343,7 +345,7 @@ export const normalizeReview = (review = {}) => ({
 export const createInitialReviews = () => [
   normalizeReview({
     id: 'review-1',
-    user: '@marianitooo',
+    user: '@tu_lado_b',
     albumTitle: 'Serotonina',
     artist: 'Khea',
     rating: 5,
@@ -372,11 +374,11 @@ export const createInitialReviews = () => [
     text: 'Breakdown epico. Tiene una crudeza que suma mucho.',
     cover:
       'https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/2b/3e/2e/2b3e2e5c-9c9e-0e9e-5e5e-5e5e5e5e5e5e/196362125692.jpg/600x600bb.jpg',
-    likedBy: ['@marianitooo'],
+    likedBy: ['@tu_lado_b'],
     comments: [
       {
         id: 'comment-2',
-        user: '@marianitooo',
+        user: '@tu_lado_b',
         text: 'Lo mejor del album es como entra el track 4.',
         createdLabel: 'Hace 40 min',
         createdAt: createRelativeIso({ minutes: 40 }),
@@ -568,7 +570,7 @@ export const createInitialNotifications = () => [
   normalizeNotification({
     id: 'notification-1',
     type: 'social',
-    title: 'Fran comento tu resena',
+    title: 'Fran comentó tu reseña',
     body: '"Serotonina" ya tiene una respuesta en el feed.',
     timeLabel: 'Hace 2 h',
     createdAt: createRelativeIso({ hours: 2 }),

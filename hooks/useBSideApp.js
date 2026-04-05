@@ -58,6 +58,7 @@ import {
 import { loadAppState, saveAppState } from '../lib/storage';
 import {
   createBackendNotification,
+  checkHandleAvailability,
   createMessageRecord,
   getAuthenticatedProfileSnapshot,
   createListRecord,
@@ -83,7 +84,9 @@ import {
   signInWithEmail,
   signOutSession,
   sendMagicLink,
+  sendPasswordReset,
   submitProfileReport,
+  sanitizeProfileHandle,
   unfollowProfileByHandle,
   unblockProfileByHandle,
   updateListRecord,
@@ -2992,10 +2995,10 @@ export default function useBSideApp() {
 
     pushNotification({
       type: 'product',
-      title: 'Demo lista para explorar',
+      title: 'B-Side listo para explorar',
       body:
         sessionMode === 'member_preview'
-          ? 'Entraste en modo cuenta demo.'
+          ? 'Entraste con una cuenta pendiente de confirmación.'
           : 'Entraste como invitado.',
       read: true,
     });
@@ -3282,13 +3285,15 @@ export default function useBSideApp() {
     };
   };
 
-  const saveAuthPreview = ({ name, email }) => {
+  const saveAuthPreview = ({ name, email, handle, birthDate }) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     setCurrentUser((prevUser) => ({
       ...prevUser,
       name: name?.trim() || prevUser.name,
       email: normalizedEmail,
+      handle: handle?.trim()?.replace(/^@+/, '') || prevUser.handle,
+      birthDate: birthDate || prevUser.birthDate || '',
     }));
 
     setPreferences((prevPreferences) => ({
@@ -3305,18 +3310,32 @@ export default function useBSideApp() {
     });
   };
 
-  const registerRealAccount = async ({ name, email, password }) => {
+  const registerRealAccount = async ({ name, handle, birthDate, email, password }) => {
+    const normalizedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedBirthDate = birthDate || '';
 
     setIsAuthBusy(true);
     setAuthMessage('');
+
+    const handleCheck = await checkHandleAvailability(handle, authSession?.user?.id);
+
+    if (!handleCheck.ok || !handleCheck.available) {
+      setIsAuthBusy(false);
+      setAuthMessage(handleCheck.message || 'No pudimos usar ese @.');
+      return {
+        ok: false,
+        message: handleCheck.message || 'No pudimos usar ese @.',
+      };
+    }
 
     const response = await registerWithEmail({
       email: normalizedEmail,
       password,
       metadata: {
-        display_name: name.trim() || currentUser.name,
-        handle: currentUser.handle,
+        display_name: normalizedName || currentUser.name,
+        handle: handleCheck.handle,
+        birth_date: normalizedBirthDate,
       },
     });
 
@@ -3328,16 +3347,20 @@ export default function useBSideApp() {
 
     setCurrentUser((prevUser) => ({
       ...prevUser,
-      name: name.trim() || prevUser.name,
+      name: normalizedName || prevUser.name,
+      handle: handleCheck.handle || prevUser.handle,
       email: normalizedEmail,
+      birthDate: normalizedBirthDate || prevUser.birthDate || '',
     }));
 
     if (response.data?.session?.user) {
       const ensuredProfile = await upsertProfile({
         ...currentUser,
         id: response.data.session.user.id,
-        name: name.trim() || currentUser.name,
+        name: normalizedName || currentUser.name,
+        handle: handleCheck.handle || currentUser.handle,
         email: normalizedEmail,
+        birthDate: normalizedBirthDate,
       });
 
       if (ensuredProfile.ok) {
@@ -3345,7 +3368,10 @@ export default function useBSideApp() {
       } else {
         await refreshAuthenticatedUser({
           ...currentUser,
+          name: normalizedName || currentUser.name,
+          handle: handleCheck.handle || currentUser.handle,
           email: normalizedEmail,
+          birthDate: normalizedBirthDate,
         });
       }
     } else {
@@ -3359,7 +3385,7 @@ export default function useBSideApp() {
     pushNotification({
       type: 'security',
       title: 'Registro iniciado',
-      body: 'Tu cuenta real quedó creada. Revisá el mail si Supabase pide confirmación.',
+      body: 'Tu cuenta real quedó creada. Revisá el email si hace falta confirmarla.',
       read: true,
     });
 
@@ -3400,7 +3426,7 @@ export default function useBSideApp() {
       pushNotification({
         type: 'security',
         title: 'Sesión iniciada',
-        body: 'Tu cuenta real ya quedó activa en esta demo.',
+        body: 'Tu cuenta real ya quedó activa en B-Side.',
         read: true,
       });
       setAuthMessage('Sesión iniciada.');
@@ -3433,11 +3459,30 @@ export default function useBSideApp() {
       }));
       pushNotification({
         type: 'security',
-        title: 'Magic link enviado',
-        body: 'Revisá tu email para continuar el acceso.',
+        title: 'Acceso por email enviado',
+        body: 'Revisá tu email para continuar.',
         read: true,
       });
-      setAuthMessage('Magic link enviado.');
+      setAuthMessage('Acceso por email enviado.');
+    } else {
+      setAuthMessage(response.message);
+    }
+
+    setIsAuthBusy(false);
+
+    return response;
+  };
+
+  const sendPasswordResetAccess = async (email) => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    setIsAuthBusy(true);
+    setAuthMessage('');
+
+    const response = await sendPasswordReset(normalizedEmail);
+
+    if (response.ok) {
+      setAuthMessage('Te enviamos un email para cambiar la contraseña.');
     } else {
       setAuthMessage(response.message);
     }
@@ -3698,7 +3743,7 @@ export default function useBSideApp() {
       pushNotification({
         type: 'social',
         title: 'Scratch guardado',
-        body: `Dejaste marcada la resena de "${scratchState.albumTitle}".`,
+        body: `Dejaste marcada la reseña de "${scratchState.albumTitle}".`,
         read: true,
       });
     }
@@ -3735,7 +3780,7 @@ export default function useBSideApp() {
       pushNotification({
         type: 'social',
         title: 'Like guardado',
-        body: `Te gusto la resena de "${likeState.albumTitle}".`,
+        body: `Te gustó la reseña de "${likeState.albumTitle}".`,
         read: true,
       });
     }
@@ -3763,7 +3808,7 @@ export default function useBSideApp() {
             recipientId: targetReview.userId,
             actorId: authSession.user.id,
             type: 'social',
-            title: `${currentUserHandle} le dio like a tu resena`,
+            title: `${currentUserHandle} le dio like a tu reseña`,
             body: `"${targetReview.albumTitle}" acaba de sumar un nuevo like.`,
             entityType: 'review',
             entityId: likeState.reviewBackendId,
@@ -3853,8 +3898,8 @@ export default function useBSideApp() {
             recipientId: commentState.reviewOwnerId,
             actorId: authSession.user.id,
             type: 'social',
-            title: `${currentUserHandle} comento tu resena`,
-            body: `Tu resena de "${commentState.albumTitle}" tiene una respuesta nueva.`,
+            title: `${currentUserHandle} comentó tu reseña`,
+            body: `Tu reseña de "${commentState.albumTitle}" tiene una respuesta nueva.`,
             entityType: 'review',
             entityId: commentState.reviewBackendId,
           });
@@ -3979,10 +4024,10 @@ export default function useBSideApp() {
     pushNotification({
       type: 'social',
       title: editingReview
-        ? 'Resena actualizada'
+        ? 'Reseña actualizada'
         : reviewContext?.origin === 'while-listening'
           ? 'Review while listening publicada'
-          : 'Resena publicada',
+          : 'Reseña publicada',
       body:
         reviewContext?.origin === 'while-listening'
           ? `"${albumTitle}" ya quedo marcada mientras sonaba.`
@@ -4247,6 +4292,22 @@ export default function useBSideApp() {
   };
 
   const saveProfile = async (profileUpdates) => {
+    const nextHandle =
+      sanitizeProfileHandle(profileUpdates.handle || currentUser.handle) ||
+      currentUser.handle;
+
+    const handleCheck = await checkHandleAvailability(
+      nextHandle,
+      authSession?.user?.id
+    );
+
+    if (!handleCheck.ok || !handleCheck.available) {
+      return {
+        ok: false,
+        message: handleCheck.message || 'No pudimos guardar ese @.',
+      };
+    }
+
     const avatarReview = reviewProfileAssetSource(profileUpdates.avatarUrl);
     const wallpaperReview = reviewProfileAssetSource(profileUpdates.wallpaperUrl);
 
@@ -4261,6 +4322,7 @@ export default function useBSideApp() {
     const localDraft = {
       ...currentUser,
       ...profileUpdates,
+      handle: handleCheck.handle || nextHandle,
       avatarModerationStatus:
         avatarReview.moderationStatus || currentUser.avatarModerationStatus,
       wallpaperModerationStatus:
@@ -4615,6 +4677,7 @@ export default function useBSideApp() {
     registerRealAccount,
     signInRealAccount,
     sendMagicLinkAccess,
+    sendPasswordResetAccess,
     signOutBackendAccount,
     refreshAuthenticatedUser,
     connectSpotifyAccount,

@@ -139,7 +139,7 @@ const ShareReviewCard = ({ visible, onClose, review, user }) => {
               <View style={styles.content}>
                 <Text style={styles.profileName}>{user?.name || 'B-Side'}</Text>
                 <Text style={[styles.userName, { color: theme.accent }]}>
-                  @{user?.handle || review?.user || 'marianitooo'}
+                  @{user?.handle || review?.user || 'tu_lado_b'}
                 </Text>
                 <Text style={styles.bio} numberOfLines={2}>
                   {user?.bio || 'Chequeá mi perfil en B-Side.'}

@@ -30,8 +30,17 @@ import {
   buildProfileTheme,
 } from '../data/appState';
 
+const sanitizeHandle = (value = '') =>
+  `${value}`
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, '')
+    .replace(/[^a-z0-9._]/g, '')
+    .slice(0, 20);
+
 const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
   const [editName, setEditName] = useState(user?.name || '');
+  const [editHandle, setEditHandle] = useState(user?.handle || '');
   const [editBio, setEditBio] = useState(user?.bio || '');
   const [editAvatarUrl, setEditAvatarUrl] = useState(user?.avatarUrl || '');
   const [editWallpaperUrl, setEditWallpaperUrl] = useState(
@@ -54,16 +63,18 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
   const hasPendingMediaChange =
     editAvatarUrl !== (user?.avatarUrl || '') ||
     editWallpaperUrl !== (user?.wallpaperUrl || '');
+
   const moderationMessage =
     user?.avatarModerationStatus === 'pending_review' ||
     user?.wallpaperModerationStatus === 'pending_review'
-      ? 'Tu foto o fondo siguen en revisión antes de quedar públicos.'
+      ? 'Tu foto o tu fondo siguen en revisión antes de quedar públicos.'
       : hasPendingMediaChange
-        ? 'Si guardás una foto o fondo nuevos en una cuenta real, quedarán en revisión antes de mostrarse en el perfil.'
+        ? 'Si guardás una foto o un fondo nuevos en una cuenta real, van a quedar en revisión antes de mostrarse en el perfil.'
         : 'Podés personalizar tu perfil ahora y seguir afinándolo con el uso.';
 
   const syncFromUser = () => {
     setEditName(user?.name || '');
+    setEditHandle(user?.handle || '');
     setEditBio(user?.bio || '');
     setEditAvatarUrl(user?.avatarUrl || '');
     setEditWallpaperUrl(user?.wallpaperUrl || '');
@@ -121,7 +132,8 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
   const handleSave = async () => {
     const result = await onSave({
       name: editName.trim() || user?.name || 'Usuario',
-      bio: editBio.trim() || user?.bio || '',
+      handle: sanitizeHandle(editHandle) || user?.handle || 'tu_lado_b',
+      bio: editBio.trim() || '',
       avatarUrl: editAvatarUrl.trim(),
       wallpaperUrl: editWallpaperUrl.trim(),
       themePreset: editThemePreset,
@@ -145,7 +157,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Editar perfil</Text>
-            <TouchableOpacity onPress={closeModal}>
+            <TouchableOpacity onPress={closeModal} accessibilityLabel="Cerrar">
               <X color="white" size={24} />
             </TouchableOpacity>
           </View>
@@ -199,7 +211,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
                   </Text>
                   <Text
                     style={[styles.previewHandle, { color: previewTheme.accent }]}>
-                    @{user?.handle}
+                    @{sanitizeHandle(editHandle) || user?.handle || 'tu_lado_b'}
                   </Text>
                 </View>
               </View>
@@ -235,6 +247,20 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               placeholderTextColor="#666"
             />
 
+            <Text style={styles.label}>@ de perfil</Text>
+            <TextInput
+              style={styles.input}
+              value={editHandle}
+              onChangeText={(value) => setEditHandle(sanitizeHandle(value))}
+              placeholder="tu_handle"
+              placeholderTextColor="#666"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={styles.helperText}>
+              Ese @ es público y es la forma en la que otras personas te encuentran.
+            </Text>
+
             <Text style={styles.label}>Bio</Text>
             <TextInput
               style={[styles.input, styles.textarea]}
@@ -253,6 +279,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               placeholder="Pegá una URL de imagen"
               placeholderTextColor="#666"
               autoCapitalize="none"
+              autoCorrect={false}
             />
 
             <Text style={styles.label}>URL de fondo</Text>
@@ -263,6 +290,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
               placeholder="Pegá una URL de wallpaper"
               placeholderTextColor="#666"
               autoCapitalize="none"
+              autoCorrect={false}
             />
 
             <View style={styles.groupHeader}>
@@ -299,7 +327,7 @@ const ProfileEditModal = ({ visible, user, onClose, onSave, isSaving }) => {
 
             <View style={styles.groupHeader}>
               <Sparkles color="#A855F7" size={18} />
-              <Text style={styles.groupTitle}>Wallpapers base</Text>
+              <Text style={styles.groupTitle}>Fondos base</Text>
             </View>
 
             <ScrollView
@@ -360,192 +388,227 @@ const styles = StyleSheet.create({
   },
   content: {
     maxHeight: '92%',
-    backgroundColor: '#0A0A0A',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderTopWidth: 1,
-    borderTopColor: '#1A1A1A',
-    padding: 24,
+    backgroundColor: '#070914',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 18,
+    paddingBottom: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.22)',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    marginBottom: 18,
   },
-  title: { color: 'white', fontSize: 24, fontWeight: '800' },
+  title: {
+    color: 'white',
+    fontSize: 28,
+    fontWeight: '900',
+  },
   scrollContent: {
-    paddingBottom: 26,
+    paddingBottom: 28,
   },
   previewCard: {
-    height: 190,
-    borderRadius: 26,
+    minHeight: 220,
+    borderRadius: 24,
     overflow: 'hidden',
-    padding: 18,
+    padding: 22,
     justifyContent: 'space-between',
-    marginBottom: 22,
+    marginBottom: 18,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
   previewWallpaper: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.5,
   },
   previewTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
   },
-  previewMeta: { flex: 1 },
   previewAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.22)',
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.7)',
   },
-  previewAvatarImage: { width: '100%', height: '100%' },
-  previewAvatarText: { color: 'white', fontSize: 24, fontWeight: '800' },
-  previewName: { color: 'white', fontSize: 20, fontWeight: '800' },
-  previewHandle: { marginTop: 4, fontWeight: '700' },
-  previewBio: { color: '#E5E7EB', lineHeight: 20, maxWidth: '85%' },
+  previewAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  previewAvatarText: {
+    color: 'white',
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  previewMeta: {
+    flex: 1,
+    gap: 4,
+  },
+  previewName: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  previewHandle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  previewBio: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 15,
+    lineHeight: 22,
+  },
   mediaRow: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   mediaButton: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 52,
     borderRadius: 16,
+    backgroundColor: 'rgba(17, 24, 39, 0.94)',
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#111827',
-    justifyContent: 'center',
+    borderColor: 'rgba(168, 85, 247, 0.24)',
     alignItems: 'center',
+    justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
   },
   mediaText: {
-    color: '#E5E7EB',
+    color: '#E9D5FF',
     fontWeight: '700',
   },
   moderationNote: {
-    color: '#9CA3AF',
-    lineHeight: 19,
-    marginBottom: 18,
+    color: '#94A3B8',
+    fontSize: 13,
+    lineHeight: 20,
+    marginBottom: 16,
   },
   label: {
-    color: '#C4B5FD',
-    fontSize: 14,
+    color: '#E5E7EB',
+    fontSize: 13,
     fontWeight: '800',
     marginBottom: 8,
-    marginLeft: 5,
+    marginTop: 8,
   },
   input: {
-    backgroundColor: '#111827',
-    color: 'white',
-    borderRadius: 15,
-    padding: 15,
-    fontSize: 16,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: '#13162A',
     borderWidth: 1,
-    borderColor: '#1F2937',
-    marginBottom: 20,
+    borderColor: 'rgba(148, 163, 184, 0.14)',
+    color: 'white',
+    fontSize: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   textarea: {
-    minHeight: 86,
+    minHeight: 110,
     textAlignVertical: 'top',
+  },
+  helperText: {
+    color: '#8FA2C4',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 8,
   },
   groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginTop: 22,
     marginBottom: 14,
   },
   groupTitle: {
     color: 'white',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
   },
   themeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginBottom: 24,
   },
   themeOption: {
-    width: '48%',
+    width: '47%',
     borderRadius: 18,
+    backgroundColor: '#111526',
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: 'rgba(148, 163, 184, 0.14)',
     padding: 12,
-    backgroundColor: '#0F172A',
+    gap: 10,
+    position: 'relative',
   },
   themeOptionActive: {
-    borderColor: '#A855F7',
+    borderColor: 'rgba(168, 85, 247, 0.56)',
   },
   themeSwatch: {
-    height: 54,
-    borderRadius: 12,
-    marginBottom: 10,
+    height: 58,
+    borderRadius: 14,
   },
   themeName: {
     color: 'white',
+    fontSize: 14,
     fontWeight: '700',
   },
   checkBadge: {
     position: 'absolute',
     top: 10,
     right: 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#8A2BE2',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#A855F7',
     justifyContent: 'center',
     alignItems: 'center',
   },
   wallpaperRow: {
     gap: 12,
-    paddingBottom: 8,
-    marginBottom: 24,
+    paddingRight: 8,
   },
   wallpaperOption: {
-    width: 116,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#1F2937',
-    padding: 8,
-    backgroundColor: '#0F172A',
+    width: 128,
+    gap: 8,
   },
   wallpaperOptionActive: {
-    borderColor: '#A855F7',
+    opacity: 1,
   },
   wallpaperThumb: {
-    width: '100%',
-    height: 82,
-    borderRadius: 12,
-    marginBottom: 8,
+    width: 128,
+    height: 88,
+    borderRadius: 18,
+    backgroundColor: '#111526',
   },
   wallpaperLabel: {
     color: '#E5E7EB',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
-    textAlign: 'center',
   },
   saveButton: {
-    backgroundColor: '#8A2BE2',
-    padding: 18,
-    borderRadius: 15,
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: '#A855F7',
     alignItems: 'center',
-    marginTop: 10,
+    justifyContent: 'center',
+    marginTop: 24,
   },
   saveButtonDisabled: {
-    opacity: 0.72,
+    opacity: 0.6,
   },
-  saveText: { color: 'white', fontSize: 16, fontWeight: '800' },
+  saveText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+  },
 });
 
 export default ProfileEditModal;

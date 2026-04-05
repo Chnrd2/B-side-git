@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -26,7 +26,7 @@ const ACCESS_MODES = [
   {
     id: 'register',
     title: 'Crear cuenta',
-    description: 'Guardá tu progreso y empezá a construir tu perfil real.',
+    description: 'Guardá tu progreso, elegí tu @ y dejá listo tu perfil real.',
   },
   {
     id: 'login',
@@ -34,6 +34,78 @@ const ACCESS_MODES = [
     description: 'Entrá con tu cuenta para recuperar listas, reseñas y chats.',
   },
 ];
+
+const buildHandleCandidate = (value = '') =>
+  `${value}`
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9._\s-]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 20);
+
+const formatBirthDateInput = (value = '') => {
+  const digits = `${value}`.replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+
+  if (digits.length <= 2) return day;
+  if (digits.length <= 4) return `${day}/${month}`;
+  return `${day}/${month}/${year}`;
+};
+
+const parseBirthDateInput = (value = '') => {
+  const digits = `${value}`.replace(/\D/g, '');
+
+  if (digits.length !== 8) {
+    return { ok: false, message: 'Usá la fecha en formato DD/MM/AAAA.' };
+  }
+
+  const day = Number(digits.slice(0, 2));
+  const month = Number(digits.slice(2, 4));
+  const year = Number(digits.slice(4, 8));
+  const parsedDate = new Date(year, month - 1, day);
+
+  if (
+    Number.isNaN(parsedDate.getTime()) ||
+    parsedDate.getDate() !== day ||
+    parsedDate.getMonth() !== month - 1 ||
+    parsedDate.getFullYear() !== year
+  ) {
+    return { ok: false, message: 'Esa fecha no parece válida.' };
+  }
+
+  const today = new Date();
+  const minimumAgeDate = new Date(
+    today.getFullYear() - 13,
+    today.getMonth(),
+    today.getDate()
+  );
+
+  if (parsedDate > minimumAgeDate) {
+    return {
+      ok: false,
+      message: 'Necesitás tener al menos 13 años para crear una cuenta.',
+    };
+  }
+
+  return {
+    ok: true,
+    normalized: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(
+      2,
+      '0'
+    )}`,
+  };
+};
+
+const getInitialName = (currentUser) => {
+  if (!currentUser?.name) return '';
+  if (currentUser?.name === 'Tu lado B') return '';
+  return currentUser.name;
+};
 
 const OnboardingScreen = ({
   currentUser,
@@ -44,13 +116,21 @@ const OnboardingScreen = ({
   onRegisterRealAccount,
   onSignInRealAccount,
   onSendMagicLink,
+  onSendPasswordReset,
 }) => {
+  const initialName = useMemo(() => getInitialName(currentUser), [currentUser]);
+  const initialEmail = currentUser?.email || '';
+
   const [step, setStep] = useState('intro');
   const [mode, setMode] = useState('register');
-  const [name, setName] = useState(currentUser?.name || '');
-  const [email, setEmail] = useState(currentUser?.email || '');
+  const [name, setName] = useState(initialName);
+  const [handle, setHandle] = useState(buildHandleCandidate(initialName));
+  const [email, setEmail] = useState(initialEmail);
+  const [birthDateInput, setBirthDateInput] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [feedback, setFeedback] = useState(null);
+  const [hasEditedHandle, setHasEditedHandle] = useState(false);
 
   const helperText = useMemo(() => {
     if (feedback?.text) {
@@ -67,27 +147,47 @@ const OnboardingScreen = ({
     return null;
   }, [authMessage, feedback]);
 
-  const isAuthAvailable = Boolean(isBackendConfigured);
+  useEffect(() => {
+    if (!hasEditedHandle) {
+      setHandle(buildHandleCandidate(name));
+    }
+  }, [hasEditedHandle, name]);
+
+  const resetFeedback = () => setFeedback(null);
 
   const goToAccess = () => {
-    setFeedback(null);
+    resetFeedback();
     setStep('access');
   };
 
   const goBackToIntro = () => {
-    setFeedback(null);
+    resetFeedback();
     setPassword('');
+    setConfirmPassword('');
     setStep('intro');
   };
 
-  const handleGuestAccess = () => {
-    setFeedback(null);
-    onContinueGuest?.();
-  };
-
-  const handleRegister = async () => {
+  const submitRegister = async () => {
     const normalizedName = name.trim();
+    const normalizedHandle = buildHandleCandidate(handle);
     const normalizedEmail = email.trim().toLowerCase();
+    const parsedBirthDate = parseBirthDateInput(birthDateInput);
+
+    if (!normalizedName) {
+      setFeedback({
+        tone: 'error',
+        text: 'Escribí cómo querés aparecer en tu perfil.',
+      });
+      return;
+    }
+
+    if (normalizedHandle.length < 3) {
+      setFeedback({
+        tone: 'error',
+        text: 'Elegí un @ de al menos 3 caracteres.',
+      });
+      return;
+    }
 
     if (!normalizedEmail) {
       setFeedback({
@@ -97,16 +197,34 @@ const OnboardingScreen = ({
       return;
     }
 
+    if (!parsedBirthDate.ok) {
+      setFeedback({
+        tone: 'error',
+        text: parsedBirthDate.message,
+      });
+      return;
+    }
+
     if (password.trim().length < 6) {
       setFeedback({
         tone: 'error',
-        text: 'Usá al menos 6 caracteres para la contraseña.',
+        text: 'Usá una contraseña de al menos 6 caracteres.',
+      });
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setFeedback({
+        tone: 'error',
+        text: 'Las contraseñas no coinciden.',
       });
       return;
     }
 
     const response = await onRegisterRealAccount?.({
-      name: normalizedName || currentUser?.name || '',
+      name: normalizedName,
+      handle: normalizedHandle,
+      birthDate: parsedBirthDate.normalized,
       email: normalizedEmail,
       password,
     });
@@ -127,7 +245,7 @@ const OnboardingScreen = ({
     });
   };
 
-  const handleLogin = async () => {
+  const submitLogin = async () => {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail || !password.trim()) {
@@ -157,7 +275,7 @@ const OnboardingScreen = ({
     });
   };
 
-  const handleMagicLink = async () => {
+  const submitMagicLink = async () => {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
@@ -173,16 +291,301 @@ const OnboardingScreen = ({
     if (!response?.ok) {
       setFeedback({
         tone: 'error',
-        text: response?.message || 'No pudimos enviar el acceso por email.',
+        text: response?.message || 'No pudimos enviarte el acceso por email.',
       });
       return;
     }
 
     setFeedback({
       tone: 'success',
-      text: 'Te mandamos el acceso por email. Revisá tu bandeja para continuar.',
+      text: 'Te mandamos un enlace de acceso por email. Revisá tu bandeja.',
     });
   };
+
+  const submitPasswordReset = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setFeedback({
+        tone: 'error',
+        text: 'Escribí tu email para recuperar la contraseña.',
+      });
+      return;
+    }
+
+    const response = await onSendPasswordReset?.(normalizedEmail);
+
+    if (!response?.ok) {
+      setFeedback({
+        tone: 'error',
+        text:
+          response?.message ||
+          'No pudimos enviarte el email para cambiar la contraseña.',
+      });
+      return;
+    }
+
+    setFeedback({
+      tone: 'success',
+      text: 'Te enviamos un email para cambiar la contraseña.',
+    });
+  };
+
+  const renderIntro = () => (
+    <>
+      <View style={styles.previewCard}>
+        <View style={styles.previewVisual}>
+          <View style={styles.visualGlow} />
+          <View style={styles.visualRecordOuter}>
+            <View style={styles.visualRecordMiddle}>
+              <View style={styles.visualRecordInner}>
+                <Disc3 color="#F3E8FF" size={28} />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.pointRow}>
+          <Sparkles color="#A855F7" size={18} />
+          <Text style={styles.pointText}>
+            Guardá discos para escuchar después y armá listas con tu propio criterio.
+          </Text>
+        </View>
+        <View style={styles.pointRow}>
+          <Shield color="#A855F7" size={18} />
+          <Text style={styles.pointText}>
+            Personalizá tu perfil, compartí reseñas y descubrí artistas desde una
+            comunidad hecha para melómanos.
+          </Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.primaryButton} onPress={goToAccess}>
+        <Text style={styles.primaryText}>Entrar</Text>
+        <ArrowRight color="white" size={18} />
+      </TouchableOpacity>
+
+      <Pressable style={styles.footnote} onPress={goToAccess}>
+        <Text style={styles.footnoteText}>
+          Tu lado B también merece un lugar propio.
+        </Text>
+      </Pressable>
+    </>
+  );
+
+  const renderAccess = () => (
+    <View style={styles.accessCard}>
+      <TouchableOpacity style={styles.backRow} onPress={goBackToIntro}>
+        <ArrowLeft color="#E9D5FF" size={18} />
+        <Text style={styles.backText}>Volver</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.accessTitle}>Elegí cómo querés entrar</Text>
+      <Text style={styles.accessSubtitle}>
+        Podés seguir como invitado o dejar tu cuenta real lista desde ya.
+      </Text>
+
+      <View style={styles.modeTabs}>
+        {ACCESS_MODES.map((option) => {
+          const isActive = mode === option.id;
+
+          return (
+            <TouchableOpacity
+              key={option.id}
+              style={[styles.modeButton, isActive && styles.modeButtonActive]}
+              onPress={() => {
+                setMode(option.id);
+                resetFeedback();
+              }}>
+              <Text
+                style={[
+                  styles.modeButtonTitle,
+                  isActive && styles.modeButtonTitleActive,
+                ]}>
+                {option.title}
+              </Text>
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  isActive && styles.modeButtonTextActive,
+                ]}>
+                {option.description}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {!isBackendConfigured ? (
+        <View style={styles.noticeCard}>
+          <Text style={styles.noticeTitle}>Acceso real pendiente</Text>
+          <Text style={styles.noticeText}>
+            Todavía no pudimos conectar el backend de esta instalación. Igual podés
+            entrar como invitado y terminar la cuenta más adelante.
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.formCard}>
+        {mode === 'register' ? (
+          <>
+            <View style={styles.inputGroup}>
+              <UserRound color="#A855F7" size={18} />
+              <TextInput
+                style={styles.input}
+                placeholder="Nombre visible"
+                placeholderTextColor="#666"
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.handlePrefix}>@</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="tu_handle"
+                placeholderTextColor="#666"
+                value={handle}
+                autoCapitalize="none"
+                autoCorrect={false}
+                onChangeText={(value) => {
+                  setHasEditedHandle(true);
+                  setHandle(buildHandleCandidate(value));
+                }}
+              />
+            </View>
+
+            <Text style={styles.metaNote}>
+              Ese @ va a ser público y es la forma en la que la gente te va a encontrar.
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Shield color="#A855F7" size={18} />
+              <TextInput
+                style={styles.input}
+                placeholder="Fecha de nacimiento (DD/MM/AAAA)"
+                placeholderTextColor="#666"
+                value={birthDateInput}
+                keyboardType="number-pad"
+                onChangeText={(value) =>
+                  setBirthDateInput(formatBirthDateInput(value))
+                }
+              />
+            </View>
+
+            <Text style={styles.metaNote}>
+              No mostramos tu fecha en el perfil. Solo la usamos para validar la edad
+              mínima y proteger mejor la cuenta.
+            </Text>
+          </>
+        ) : null}
+
+        <View style={styles.inputGroup}>
+          <Mail color="#A855F7" size={18} />
+          <TextInput
+            style={styles.input}
+            placeholder="tuemail@ejemplo.com"
+            placeholderTextColor="#666"
+            value={email}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            onChangeText={setEmail}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <LockKeyhole color="#A855F7" size={18} />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            placeholderTextColor="#666"
+            value={password}
+            secureTextEntry
+            onChangeText={setPassword}
+          />
+        </View>
+
+        {mode === 'register' ? (
+          <View style={styles.inputGroup}>
+            <LockKeyhole color="#A855F7" size={18} />
+            <TextInput
+              style={styles.input}
+              placeholder="Repetí tu contraseña"
+              placeholderTextColor="#666"
+              value={confirmPassword}
+              secureTextEntry
+              onChangeText={setConfirmPassword}
+            />
+          </View>
+        ) : null}
+
+        {helperText ? (
+          <View
+            style={[
+              styles.feedbackCard,
+              helperText.tone === 'error'
+                ? styles.feedbackError
+                : helperText.tone === 'success'
+                  ? styles.feedbackSuccess
+                  : styles.feedbackInfo,
+            ]}>
+            <Text style={styles.feedbackText}>{helperText.text}</Text>
+          </View>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.primaryButton, !isBackendConfigured && styles.disabledButton]}
+          onPress={mode === 'register' ? submitRegister : submitLogin}
+          disabled={isAuthBusy || !isBackendConfigured}>
+          {isAuthBusy ? (
+            <ActivityIndicator color="white" />
+          ) : (
+            <>
+              <Text style={styles.primaryText}>
+                {mode === 'register' ? 'Crear cuenta real' : 'Iniciar sesión'}
+              </Text>
+              <ArrowRight color="white" size={18} />
+            </>
+          )}
+        </TouchableOpacity>
+
+        {mode === 'login' ? (
+          <TouchableOpacity
+            style={styles.textActionButton}
+            onPress={submitPasswordReset}
+            disabled={isAuthBusy || !isBackendConfigured}>
+            <Text style={styles.textActionLabel}>Olvidé mi contraseña</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, !isBackendConfigured && styles.disabledButton]}
+          onPress={submitMagicLink}
+          disabled={isAuthBusy || !isBackendConfigured}>
+          {isAuthBusy ? (
+            <ActivityIndicator color="#E9D5FF" />
+          ) : (
+            <Text style={styles.secondaryText}>Enviar acceso por email</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.guestButton}
+          onPress={onContinueGuest}
+          disabled={isAuthBusy}>
+          <Text style={styles.guestText}>Seguir como invitado</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.accessFootnote}>
+        Podés entrar como invitado y conectar tu cuenta después desde el perfil, sin
+        perder el acceso a la app.
+      </Text>
+    </View>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -200,209 +603,14 @@ const OnboardingScreen = ({
             <Disc3 color="#E9D5FF" size={18} />
             <Text style={styles.badgeText}>B-SIDE</Text>
           </View>
-          <Text style={styles.title}>
-            Descubrí, guardá y compartí música a tu manera
-          </Text>
+          <Text style={styles.title}>Descubrí, guardá y compartí música a tu manera</Text>
           <Text style={styles.subtitle}>
             Encontrá discos, armá tus listas, dejá reseñas y conectá con gente que
             vibra con la música como vos.
           </Text>
         </View>
 
-        {step === 'intro' ? (
-          <>
-            <View style={styles.previewCard}>
-              <View style={styles.previewVisual}>
-                <View style={styles.visualGlow} />
-                <View style={styles.visualRecordOuter}>
-                  <View style={styles.visualRecordMiddle}>
-                    <View style={styles.visualRecordInner}>
-                      <Disc3 color="#F3E8FF" size={28} />
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.pointRow}>
-                <Sparkles color="#A855F7" size={18} />
-                <Text style={styles.pointText}>
-                  Guardá discos para escuchar después y armá listas con tu propio
-                  criterio.
-                </Text>
-              </View>
-              <View style={styles.pointRow}>
-                <Shield color="#A855F7" size={18} />
-                <Text style={styles.pointText}>
-                  Personalizá tu perfil, compartí reseñas y descubrí artistas
-                  desde una comunidad hecha para melómanos.
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.primaryButton} onPress={goToAccess}>
-              <Text style={styles.primaryText}>Entrar</Text>
-              <ArrowRight color="white" size={18} />
-            </TouchableOpacity>
-
-            <Pressable style={styles.footnote} onPress={goToAccess}>
-              <Text style={styles.footnoteText}>
-                Tu lado B también merece un lugar propio.
-              </Text>
-            </Pressable>
-          </>
-        ) : (
-          <View style={styles.accessCard}>
-            <TouchableOpacity style={styles.backRow} onPress={goBackToIntro}>
-              <ArrowLeft color="#E9D5FF" size={18} />
-              <Text style={styles.backText}>Volver</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.accessTitle}>Elegí cómo querés entrar</Text>
-            <Text style={styles.accessSubtitle}>
-              Podés seguir como invitado o dejar lista tu cuenta real desde ya.
-            </Text>
-
-            <View style={styles.modeTabs}>
-              {ACCESS_MODES.map((option) => {
-                const isActive = mode === option.id;
-
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[styles.modeButton, isActive && styles.modeButtonActive]}
-                    onPress={() => {
-                      setMode(option.id);
-                      setFeedback(null);
-                    }}>
-                    <Text
-                      style={[
-                        styles.modeButtonTitle,
-                        isActive && styles.modeButtonTitleActive,
-                      ]}>
-                      {option.title}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.modeButtonText,
-                        isActive && styles.modeButtonTextActive,
-                      ]}>
-                      {option.description}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {!isAuthAvailable ? (
-              <View style={styles.noticeCard}>
-                <Text style={styles.noticeTitle}>Acceso real pendiente</Text>
-                <Text style={styles.noticeText}>
-                  Supabase no está listo en este entorno. Mientras tanto podés
-                  seguir como invitado y terminar el acceso más adelante.
-                </Text>
-              </View>
-            ) : null}
-
-            <View style={styles.formCard}>
-              {mode === 'register' ? (
-                <View style={styles.inputGroup}>
-                  <UserRound color="#A855F7" size={18} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Tu nombre"
-                    placeholderTextColor="#666"
-                    value={name}
-                    onChangeText={setName}
-                  />
-                </View>
-              ) : null}
-
-              <View style={styles.inputGroup}>
-                <Mail color="#A855F7" size={18} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="tuemail@ejemplo.com"
-                  placeholderTextColor="#666"
-                  value={email}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  onChangeText={setEmail}
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <LockKeyhole color="#A855F7" size={18} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Contraseña"
-                  placeholderTextColor="#666"
-                  value={password}
-                  secureTextEntry
-                  onChangeText={setPassword}
-                />
-              </View>
-
-              {helperText ? (
-                <View
-                  style={[
-                    styles.feedbackCard,
-                    helperText.tone === 'error'
-                      ? styles.feedbackError
-                      : helperText.tone === 'success'
-                        ? styles.feedbackSuccess
-                        : styles.feedbackInfo,
-                  ]}>
-                  <Text style={styles.feedbackText}>{helperText.text}</Text>
-                </View>
-              ) : null}
-
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  !isAuthAvailable && styles.disabledButton,
-                ]}
-                onPress={mode === 'register' ? handleRegister : handleLogin}
-                disabled={isAuthBusy || !isAuthAvailable}>
-                {isAuthBusy ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Text style={styles.primaryText}>
-                      {mode === 'register' ? 'Crear cuenta real' : 'Iniciar sesión'}
-                    </Text>
-                    <ArrowRight color="white" size={18} />
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.secondaryButton,
-                  !isAuthAvailable && styles.disabledButton,
-                ]}
-                onPress={handleMagicLink}
-                disabled={isAuthBusy || !isAuthAvailable}>
-                {isAuthBusy ? (
-                  <ActivityIndicator color="#E9D5FF" />
-                ) : (
-                  <Text style={styles.secondaryText}>Enviar acceso por email</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.guestButton}
-                onPress={handleGuestAccess}
-                disabled={isAuthBusy}>
-                <Text style={styles.guestText}>Seguir como invitado</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.accessFootnote}>
-              Podés entrar como invitado y conectar tu cuenta después desde el
-              perfil, sin perder la puerta de entrada de la app.
-            </Text>
-          </View>
-        )}
+        {step === 'intro' ? renderIntro() : renderAccess()}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -465,7 +673,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   previewCard: {
-    backgroundColor: 'rgba(10,10,10,0.92)',
+    backgroundColor: 'rgba(10, 10, 10, 0.92)',
     borderRadius: 28,
     borderWidth: 1,
     borderColor: '#1A1A1A',
@@ -485,77 +693,70 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: 'rgba(168, 85, 247, 0.18)',
+    backgroundColor: 'rgba(124, 58, 237, 0.2)',
   },
   visualRecordOuter: {
-    width: 118,
-    height: 118,
-    borderRadius: 59,
-    backgroundColor: '#090C14',
-    borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.36)',
+    width: 122,
+    height: 122,
+    borderRadius: 61,
+    backgroundColor: 'rgba(76, 29, 149, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8A2BE2',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 22,
-    elevation: 8,
   },
   visualRecordMiddle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#111827',
-    borderWidth: 1,
-    borderColor: 'rgba(196, 181, 253, 0.2)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(17, 24, 39, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   visualRecordInner: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#8A2BE2',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#7C3AED',
     justifyContent: 'center',
     alignItems: 'center',
   },
   pointRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     gap: 12,
+    alignItems: 'flex-start',
   },
   pointText: {
     flex: 1,
     color: '#E5E7EB',
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 24,
   },
   accessCard: {
-    backgroundColor: 'rgba(10,10,10,0.92)',
-    borderRadius: 28,
+    backgroundColor: 'rgba(7, 10, 24, 0.94)',
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
-    padding: 22,
+    borderColor: 'rgba(168, 85, 247, 0.22)',
+    padding: 24,
     gap: 18,
   },
   backRow: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    alignSelf: 'flex-start',
   },
   backText: {
-    color: '#E9D5FF',
+    color: '#F3E8FF',
+    fontSize: 15,
     fontWeight: '700',
   },
   accessTitle: {
     color: 'white',
-    fontSize: 28,
-    lineHeight: 34,
+    fontSize: 22,
     fontWeight: '900',
   },
   accessSubtitle: {
-    color: '#9CA3AF',
+    color: '#C4B5FD',
+    fontSize: 15,
     lineHeight: 22,
   },
   modeTabs: {
@@ -564,94 +765,114 @@ const styles = StyleSheet.create({
   modeButton: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#1F2937',
-    backgroundColor: '#0F172A',
+    borderColor: 'rgba(168, 85, 247, 0.14)',
     padding: 16,
-    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    gap: 8,
   },
   modeButtonActive: {
-    borderColor: 'rgba(168, 85, 247, 0.35)',
-    backgroundColor: 'rgba(138, 43, 226, 0.12)',
+    borderColor: 'rgba(168, 85, 247, 0.5)',
+    backgroundColor: 'rgba(44, 16, 74, 0.7)',
   },
   modeButtonTitle: {
-    color: 'white',
+    color: '#F8FAFC',
     fontSize: 16,
     fontWeight: '800',
   },
   modeButtonTitleActive: {
-    color: '#F5F3FF',
+    color: 'white',
   },
   modeButtonText: {
-    color: '#9CA3AF',
+    color: '#C4B5FD',
+    fontSize: 14,
     lineHeight: 20,
   },
   modeButtonTextActive: {
-    color: '#D8B4FE',
+    color: '#F3E8FF',
   },
   noticeCard: {
     borderRadius: 18,
+    padding: 16,
+    backgroundColor: 'rgba(120, 53, 15, 0.22)',
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.18)',
-    backgroundColor: 'rgba(168, 85, 247, 0.08)',
-    padding: 14,
+    borderColor: 'rgba(251, 191, 36, 0.28)',
     gap: 8,
   },
   noticeTitle: {
-    color: '#F5F3FF',
+    color: '#FCD34D',
     fontWeight: '800',
+    fontSize: 14,
   },
   noticeText: {
-    color: '#D1D5DB',
+    color: '#FDE68A',
+    fontSize: 13,
     lineHeight: 20,
   },
   formCard: {
     gap: 14,
   },
   inputGroup: {
-    minHeight: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#333',
-    backgroundColor: '#111827',
-    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: 'rgba(15, 23, 42, 0.84)',
+    paddingHorizontal: 16,
+    minHeight: 56,
+  },
+  handlePrefix: {
+    color: '#A855F7',
+    fontSize: 18,
+    fontWeight: '800',
   },
   input: {
     flex: 1,
     color: 'white',
+    fontSize: 15,
+    paddingVertical: 16,
+  },
+  metaNote: {
+    color: '#94A3B8',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: -4,
   },
   feedbackCard: {
     borderRadius: 16,
-    borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  feedbackInfo: {
-    backgroundColor: 'rgba(59, 130, 246, 0.08)',
-    borderColor: 'rgba(96, 165, 250, 0.18)',
+  feedbackError: {
+    backgroundColor: 'rgba(127, 29, 29, 0.34)',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.28)',
   },
   feedbackSuccess: {
-    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    backgroundColor: 'rgba(20, 83, 45, 0.32)',
+    borderWidth: 1,
     borderColor: 'rgba(74, 222, 128, 0.22)',
   },
-  feedbackError: {
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-    borderColor: 'rgba(248, 113, 113, 0.2)',
+  feedbackInfo: {
+    backgroundColor: 'rgba(30, 41, 59, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.14)',
   },
   feedbackText: {
-    color: '#E5E7EB',
+    color: 'white',
+    fontSize: 14,
     lineHeight: 20,
   },
   primaryButton: {
-    backgroundColor: '#8A2BE2',
     minHeight: 58,
-    borderRadius: 20,
-    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#A855F7',
     alignItems: 'center',
+    justifyContent: 'center',
     flexDirection: 'row',
     gap: 10,
+    paddingHorizontal: 18,
   },
   primaryText: {
     color: 'white',
@@ -659,48 +880,60 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   secondaryButton: {
-    minHeight: 52,
+    minHeight: 56,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(168, 85, 247, 0.22)',
-    backgroundColor: 'rgba(168, 85, 247, 0.08)',
+    borderColor: 'rgba(168, 85, 247, 0.25)',
+    backgroundColor: 'rgba(29, 18, 43, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
   },
   secondaryText: {
-    color: '#E9D5FF',
-    fontWeight: '800',
+    color: '#F3E8FF',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  textActionButton: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+  },
+  textActionLabel: {
+    color: '#C4B5FD',
+    fontSize: 14,
+    fontWeight: '700',
   },
   guestButton: {
-    minHeight: 52,
+    minHeight: 56,
     borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#111827',
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: 'rgba(148, 163, 184, 0.16)',
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
   },
   guestText: {
-    color: '#E5E7EB',
-    fontWeight: '800',
+    color: '#E2E8F0',
     fontSize: 15,
+    fontWeight: '700',
   },
   disabledButton: {
     opacity: 0.45,
   },
-  accessFootnote: {
-    textAlign: 'center',
-    color: '#6B7280',
-    lineHeight: 20,
-  },
   footnote: {
-    paddingHorizontal: 8,
+    alignSelf: 'center',
   },
   footnoteText: {
-    textAlign: 'center',
     color: '#6B7280',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  accessFootnote: {
+    color: '#94A3B8',
+    fontSize: 13,
     lineHeight: 20,
+    textAlign: 'center',
   },
 });
 

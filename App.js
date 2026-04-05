@@ -67,6 +67,7 @@ export default function App() {
             onRegisterRealAccount={app.registerRealAccount}
             onSignInRealAccount={app.signInRealAccount}
             onSendMagicLink={app.sendMagicLinkAccess}
+            onSendPasswordReset={app.sendPasswordResetAccess}
           />
         </SafeAreaView>
       </SafeAreaProvider>

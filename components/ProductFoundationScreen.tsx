@@ -28,7 +28,7 @@ const SECTION_CONFIG = [
     title: 'Seguridad y confianza',
     items: [
       'Reportes, bloqueo y controles básicos de abuso.',
-      'Sesiones, verificación por mail y alertas de acceso.',
+      'Sesiones, verificación por email y alertas de acceso.',
       'Backups, límites de uso y protección de APIs.',
       'Política de contenido y copyright musical.',
     ],
@@ -49,8 +49,8 @@ const SECTION_CONFIG = [
     icon: UserRound,
     title: 'Cuentas y login',
     items: [
-      'Registro por mail.',
-      'Acceso por mail y proveedores sociales.',
+      'Registro por email.',
+      'Acceso por email y proveedores sociales.',
       'Recuperación de contraseña y verificación.',
       'Perfiles y preferencias persistidas.',
     ],
