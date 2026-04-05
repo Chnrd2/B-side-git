@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "web:19006": "expo start --web --port 19006",
-    "export:web": "expo export -p web",
+    "export:web": "expo export -p web --clear",
     "deploy:web": "npm run export:web && gh-pages --nojekyll -d dist",
     "doctor": "cmd /c \"if exist .expo rd /s /q .expo & npx expo-doctor\"",
     "env:init": "node scripts/init-env.cjs",
