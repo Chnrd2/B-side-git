@@ -2,26 +2,38 @@
 
 ## 1. Variables de entorno
 
-Crear un archivo `.env` en la raiz y copiar:
+Creá un archivo `.env` en la raíz con estas variables mínimas:
 
 ```bash
 EXPO_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
+EXPO_PUBLIC_SUPABASE_REDIRECT_URL=bside://auth/callback
+EXPO_PUBLIC_SUPPORT_EMAIL=hola@bside.app
 ```
 
-En Windows, desde la carpeta del proyecto puedes hacer:
+Opcionales según lo que quieras activar:
+
+```bash
+EXPO_PUBLIC_SPOTIFY_PROXY_URL=
+EXPO_PUBLIC_SPOTIFY_CLIENT_ID=
+EXPO_PUBLIC_SPOTIFY_REDIRECT_URI=http://127.0.0.1:19006/spotify/callback
+EXPO_PUBLIC_MUSIC_ORACLE_URL=
+EXPO_PUBLIC_EAS_PROJECT_ID=
+```
+
+En Windows, desde la carpeta del proyecto:
 
 ```powershell
 npm run env:init
 ```
 
-Despues abre `.env`, pega tus valores reales y reinicia Expo:
+Después abrí `.env`, pegá tus valores reales y reiniciá Expo:
 
 ```powershell
 npm run web:19006
 ```
 
-Si queres verificar rapido si ya quedo bien:
+Chequeo rápido:
 
 ```powershell
 npm run supabase:check
@@ -31,19 +43,19 @@ npm run supabase:check
 
 1. Crear un proyecto nuevo en Supabase.
 2. En `Project Settings > API`, copiar la `Project URL` y la `anon public key`.
-3. Activar Email Auth.
-4. Si despues queres, sumar Google y Apple desde Auth Providers.
+3. Activar `Email Auth`.
+4. Si más adelante querés, sumar Google y Apple desde `Auth Providers`.
 
 ## 3. Base de datos
 
-1. Abrir el SQL Editor.
-2. Copiar el contenido de `supabase/schema.sql`.
-3. Ejecutarlo.
+1. Abrí el SQL Editor.
+2. Copiá el contenido de [supabase/schema.sql](/C:/Users/Administrator/Desktop/b-side/supabase/schema.sql).
+3. Ejecutalo completo.
 
-Eso crea:
+Eso deja lista la base para:
 
 - perfiles
-- resenas
+- reseñas
 - likes
 - comentarios
 - listas
@@ -51,59 +63,79 @@ Eso crea:
 - mensajes
 - reportes
 - suscripciones
+- dispositivos para push
 
-Tambien deja triggers para crear perfil y suscripcion free al registrarse.
-Y ahora tambien deja preparados los buckets `avatars` y `wallpapers` con
-politicas para que cada usuario solo suba archivos dentro de su propia carpeta.
+También crea triggers para:
+
+- generar el perfil al registrarse
+- dejar la cuenta en plan free
+- guardar `birth_date`
+- guardar `profile_completed_at`
 
 ## 4. Storage
 
-Si corriste una version vieja de `supabase/schema.sql`, puedes elegir una de estas dos opciones:
+Si corriste una versión vieja del schema, podés:
 
-- volver a ejecutar `supabase/schema.sql`, que ahora es re-ejecutable
-- o correr solo `supabase/storage-setup.sql` para crear/actualizar Storage
+- volver a ejecutar [supabase/schema.sql](/C:/Users/Administrator/Desktop/b-side/supabase/schema.sql)
+- o correr solo [supabase/storage-setup.sql](/C:/Users/Administrator/Desktop/b-side/supabase/storage-setup.sql)
+
+Buckets necesarios:
 
 - `avatars`
 - `wallpapers`
 
-Si prefieres hacerlo a mano desde `Storage`, deben existir ambos buckets para que
-foto de perfil y wallpaper funcionen.
-
 ## 5. URL Configuration
 
-En `Authentication > URL Configuration`, para esta etapa local agrega:
+En `Authentication > URL Configuration`, para desarrollo local:
 
 - `Site URL`: `http://localhost:19006`
-- `Redirect URLs`: `http://localhost:19006`
+- `Redirect URLs`:
+  - `http://localhost:19006`
+  - `bside://auth/callback`
 
-Recomendacion:
+Si usás la preview web pública, sumá también:
 
-- avatars: publico si queres URLs directas simples.
-- wallpapers: privado o publico segun como quieras manejar visibilidad.
+- `https://chnrd2.github.io/B-side-git/`
 
-En el proyecto ya queda listo el helper para eso en `lib/profileAssets.js`.
+## 6. Emails de auth
 
-Recomendacion simple para arrancar con seguridad:
+Por defecto Supabase manda emails con su branding de prueba. Para producción conviene:
 
-- avatars: bucket publico o firmado, pero con revision manual antes de exponer la imagen.
-- wallpapers: igual que avatars, porque tambien son contenido generado por usuarios.
-- no confiar en URLs externas pegadas por el usuario para produccion sin pasarlas por revision o proxy.
-- correr `npm run supabase:check` despues de tocar Storage para confirmar si los buckets ya aparecen como `ok`.
+1. Ir a `Authentication > Email Templates`
+2. Personalizar asunto, título y texto
+3. Configurar `Custom SMTP`
 
-## 6. Primer flujo real para implementar
+Referencia interna:
 
-1. Registro por email.
-2. Confirmacion por mail.
-3. Login.
-4. Perfil editable.
-5. Crear resena.
-6. Crear lista.
-7. Like y comentario.
+- [SUPABASE_EMAIL_BRANDING.md](/C:/Users/Administrator/Desktop/b-side/docs/SUPABASE_EMAIL_BRANDING.md)
 
-## 7. Antes de publicar
+## 7. Funciones que hay que desplegar
 
-- Revisar RLS tabla por tabla.
-- Definir politica de reportes y bloqueos.
-- Dejar una cola basica de revision para avatar y wallpaper.
-- Configurar dominios validos para magic link.
-- Tener Terms y Privacy visibles en onboarding y perfil.
+Si querés usar borrado real de cuenta, además del schema tenés que desplegar:
+
+- [supabase/functions/delete-account/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/delete-account/index.ts)
+
+Esa función necesita este secret en Supabase:
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+```
+
+## 8. Primer flujo real a validar
+
+1. Registro por email
+2. Confirmación por mail
+3. Login
+4. Completar perfil
+5. Recuperar contraseña
+6. Cerrar sesión
+7. Cerrar otras sesiones
+8. Borrar cuenta
+
+## 9. Antes de publicar
+
+- Revisar RLS tabla por tabla
+- Dejar política de reportes y bloqueos
+- Configurar dominio y SMTP para auth
+- Verificar deep links reales en Android/iOS
+- Tener visibles Términos y Privacidad

@@ -116,6 +116,9 @@ const AuthPreviewScreen = ({
   const [password, setPassword] = useState('');
 
   const supabaseStatus = useMemo(() => getSupabaseStatus(), []);
+  const isEmailVerified = Boolean(
+    authSession?.user?.email_confirmed_at || authSession?.user?.confirmed_at
+  );
   const pushCopy = useMemo(
     () => getPushCopy(pushSupportStatus, pushPermissionStatus),
     [pushPermissionStatus, pushSupportStatus]
@@ -264,7 +267,7 @@ const AuthPreviewScreen = ({
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <ChevronLeft color="white" size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cuenta y acceso</Text>
+        <Text style={styles.headerTitle}>Acceso y sincronización</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -272,11 +275,11 @@ const AuthPreviewScreen = ({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}>
         <View style={styles.heroCard}>
-          <Text style={styles.eyebrow}>CUENTAS Y DATOS</Text>
+          <Text style={styles.eyebrow}>ACCESO REAL</Text>
           <Text style={styles.title}>Cuenta, sesión y dispositivo</Text>
           <Text style={styles.subtitle}>
-            Desde acá podés cerrar el acceso real, ver en qué estado está el
-            dispositivo y revisar si Spotify y los avisos del sistema ya están listos.
+            Desde acá podés revisar tu acceso, actualizar la sesión y dejar el
+            dispositivo listo para avisos sin entrar en menús técnicos.
           </Text>
         </View>
 
@@ -284,31 +287,36 @@ const AuthPreviewScreen = ({
           <View style={styles.statusRow}>
             <Sparkles color="#E9D5FF" size={18} />
             <Text style={styles.statusTitle}>
-              {supabaseStatus.isConfigured ? 'Base conectada' : 'Base pendiente'}
+              {authSession?.user
+                ? 'Cuenta conectada'
+                : supabaseStatus.isConfigured
+                  ? 'Cuenta pendiente'
+                  : 'Conexión pendiente'}
             </Text>
           </View>
           <Text style={styles.statusText}>
-            Proyecto: {supabaseStatus.projectHost}
+            Email:{' '}
+            {authSession?.user?.email || currentUser.email || 'todavía no conectado'}
           </Text>
           <Text style={styles.statusText}>
-            Sesión real:{' '}
+            Estado:{' '}
             {authSession?.user
-              ? `activa como ${authSession.user.email || currentUser.email}`
-              : 'todavía no conectada'}
+              ? isEmailVerified
+                ? 'cuenta verificada'
+                : 'cuenta pendiente de verificar'
+              : 'sin sesión real activa'}
           </Text>
           <Text style={styles.statusText}>
-            Modo visible:{' '}
+            Modo actual:{' '}
             {preferences.sessionMode === 'authenticated'
               ? 'autenticado'
               : preferences.sessionMode}
           </Text>
           <Text style={styles.statusText}>
-            Spotify export:{' '}
-            {spotifySession?.accessToken ? 'cuenta conectada' : 'pendiente'}
-          </Text>
-          <Text style={styles.statusText}>
-            Playback completo:{' '}
-            {spotifyPlaybackStatus?.label || 'pendiente'}
+            Spotify:{' '}
+            {spotifySession?.accessToken
+              ? 'cuenta conectada para exportar listas'
+              : 'todavía sin conectar'}
           </Text>
         </View>
 
@@ -357,34 +365,37 @@ const AuthPreviewScreen = ({
           </View>
         ) : null}
 
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <Database color="#E9D5FF" size={18} />
-            <Text style={styles.summaryText}>
-              Tablas listas para perfiles, reseñas, comentarios, likes, listas,
-              follows, mensajes, reportes y suscripciones.
-            </Text>
+        {supabaseStatus.isConfigured ? (
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <ShieldCheck color="#E9D5FF" size={18} />
+              <Text style={styles.summaryText}>
+                La cuenta ya puede guardar tu perfil, tus reseñas, tus listas y
+                tu actividad en el backend real.
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Database color="#E9D5FF" size={18} />
+              <Text style={styles.summaryText}>
+                Si cambiás de dispositivo, podés volver a entrar y recuperar tu
+                progreso sin empezar de cero.
+              </Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <LockKeyhole color="#E9D5FF" size={18} />
+              <Text style={styles.summaryText}>
+                También queda lista la base para recuperación de contraseña,
+                verificación por email y cierre de otras sesiones.
+              </Text>
+            </View>
           </View>
-          <View style={styles.summaryRow}>
-            <ShieldCheck color="#E9D5FF" size={18} />
-            <Text style={styles.summaryText}>
-              Permisos por usuario para que cada persona vea y edite solo lo
-              que le corresponde.
-            </Text>
-          </View>
-          <View style={styles.summaryRow}>
-            <LockKeyhole color="#E9D5FF" size={18} />
-            <Text style={styles.summaryText}>
-              Email, contraseña, acceso por email y guardado de avatar y fondos.
-            </Text>
-          </View>
-        </View>
+        ) : null}
 
         <View style={styles.formCard}>
-          <Text style={styles.cardTitle}>Cuenta actual</Text>
+          <Text style={styles.cardTitle}>Acceso manual</Text>
           <Text style={styles.cardText}>
-            Si la conexión ya está activa, podés registrar, iniciar sesión y
-            sincronizar tu perfil. Si no, igual podés seguir usando el modo local.
+            Si preferís resolver la cuenta desde una sola pantalla, acá podés
+            registrar, iniciar sesión o pedir acceso por email.
           </Text>
 
           <View style={styles.inputGroup}>
@@ -430,7 +441,7 @@ const AuthPreviewScreen = ({
             {isAuthBusy ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryText}>Guardar datos locales</Text>
+              <Text style={styles.primaryText}>Guardar borrador local</Text>
             )}
           </TouchableOpacity>
 
@@ -517,26 +528,30 @@ const AuthPreviewScreen = ({
           </View>
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Espacios para archivos</Text>
-          <View style={styles.badgesWrap}>
-            {SUPABASE_STORAGE_BUCKETS.map((bucketName) => (
-              <View key={bucketName} style={styles.badge}>
-                <Text style={styles.badgeText}>{bucketName}</Text>
+        {!supabaseStatus.isConfigured ? (
+          <>
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Espacios para archivos</Text>
+              <View style={styles.badgesWrap}>
+                {SUPABASE_STORAGE_BUCKETS.map((bucketName) => (
+                  <View key={bucketName} style={styles.badge}>
+                    <Text style={styles.badgeText}>{bucketName}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Pasos de conexión</Text>
-          {SUPABASE_SETUP_STEPS.map((step) => (
-            <View key={step} style={styles.stepRow}>
-              <View style={styles.stepDot} />
-              <Text style={styles.stepText}>{step}</Text>
             </View>
-          ))}
-        </View>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>Pasos de conexión</Text>
+              {SUPABASE_SETUP_STEPS.map((step) => (
+                <View key={step} style={styles.stepRow}>
+                  <View style={styles.stepDot} />
+                  <Text style={styles.stepText}>{step}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );

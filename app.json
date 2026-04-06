@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "b-side",
+    "name": "B-Side",
     "slug": "b-side",
     "version": "1.0.0",
+    "scheme": "bside",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -13,9 +14,11 @@
       "backgroundColor": "#050816"
     },
     "ios": {
+      "bundleIdentifier": "com.bside.app",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.bside.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#050816"
@@ -41,6 +44,6 @@
         }
       ]
     ],
-    "description": "Red social musical para descubrir discos, reseñarlos y guardarlos en listas."
+    "description": "Red social musical para descubrir discos, reseñas y guardarlos en listas."
   }
 }

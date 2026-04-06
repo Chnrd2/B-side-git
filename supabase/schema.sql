@@ -5,6 +5,7 @@ create table if not exists public.profiles (
   handle text unique not null,
   display_name text not null default '',
   birth_date date,
+  profile_completed_at timestamptz,
   bio text not null default '',
   avatar_url text not null default '',
   avatar_moderation_status text not null default 'approved',
@@ -24,6 +25,9 @@ alter table public.profiles
 
 alter table public.profiles
   add column if not exists birth_date date;
+
+alter table public.profiles
+  add column if not exists profile_completed_at timestamptz;
 
 create table if not exists public.reviews (
   id uuid primary key default gen_random_uuid(),
@@ -187,6 +191,7 @@ begin
     handle,
     display_name,
     birth_date,
+    profile_completed_at,
     bio,
     avatar_url,
     avatar_moderation_status,
@@ -200,6 +205,7 @@ begin
     coalesce(new.raw_user_meta_data ->> 'handle', split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1)),
     nullif(new.raw_user_meta_data ->> 'birth_date', '')::date,
+    null,
     '',
     '',
     'approved',

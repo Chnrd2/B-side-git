@@ -8,6 +8,7 @@ import ArtistProfileScreen from '../components/ArtistProfileScreen';
 import AuthPreviewScreen from '../components/AuthPreviewScreen';
 import ChatScreen from '../components/ChatScreen';
 import FeedScreen from '../components/FeedScreen';
+import HelpScreen from '../components/HelpScreen';
 import InboxScreen from '../components/InboxScreen';
 import LegalCenterScreen from '../components/LegalCenterScreen';
 import LegalDocumentScreen from '../components/LegalDocumentScreen';
@@ -20,6 +21,7 @@ import ProfileScreen from '../components/ProfileScreen';
 import ProductFoundationScreen from '../components/ProductFoundationScreen';
 import SearchScreen from '../components/SearchScreen';
 import SecurityCenterScreen from '../components/SecurityCenterScreen';
+import SessionsScreen from '../components/SessionsScreen';
 import TabBar from '../components/TabBar';
 import { getLegalDocumentById } from '../data/legalDocuments';
 import { colors } from '../theme/bsideTheme';
@@ -382,11 +384,33 @@ export default function AppNavigator({ app }) {
             onBack={() => navigation.goBack()}
             onOpenAuth={() => navigation.navigate('AuthPreview')}
             onOpenPrivacy={() => navigation.navigate('PrivacyCenter')}
+            onOpenSessions={() => navigation.navigate('Sessions')}
+            onOpenHelp={() => navigation.navigate('Help')}
             onSendPasswordReset={app.sendPasswordResetAccess}
             onSyncSession={app.refreshAuthenticatedUser}
+            onResendVerificationEmail={app.resendVerificationEmail}
+            onRefreshVerification={app.refreshAuthenticatedUser}
+            onDeleteAccount={app.deleteBackendAccount}
             onSignOut={app.signOutBackendAccount}
           />
         )}
+      </RootStack.Screen>
+
+      <RootStack.Screen name="Sessions">
+        {({ navigation }) => (
+          <SessionsScreen
+            authSession={app.authSession}
+            currentUser={app.currentUser}
+            isAuthBusy={app.isAuthBusy}
+            onBack={() => navigation.goBack()}
+            onCloseOtherSessions={app.signOutOtherBackendSessions}
+            onSignOut={app.signOutBackendAccount}
+          />
+        )}
+      </RootStack.Screen>
+
+      <RootStack.Screen name="Help">
+        {({ navigation }) => <HelpScreen onBack={() => navigation.goBack()} />}
       </RootStack.Screen>
 
       <RootStack.Screen name="AuthPreview">

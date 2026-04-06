@@ -8,7 +8,7 @@ antes de pensar en produccion.
 ## Prioridad alta
 
 1. Login real con email y proveedor social.
-2. Backend para perfiles, resenas, listas, likes, comentarios y mensajes.
+2. Backend para perfiles, reseñas, listas, likes, comentarios y mensajes.
 3. Terminos y condiciones.
 4. Politica de privacidad.
 5. Lineamientos de comunidad y moderacion.

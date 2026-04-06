@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Animated,
   LogBox,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,8 +15,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AddToListModal from './components/AddToListModal';
 import AppBackground from './components/AppBackground';
+import CompleteProfileScreen from './components/CompleteProfileScreen';
 import CreateListModal from './components/CreateListModal';
 import CreateReviewScreen from './components/CreateReviewScreen';
+import EmailVerificationBanner from './components/EmailVerificationBanner';
 import MiniPlayer from './components/MiniPlayer';
 import OnboardingScreen from './components/OnboardingScreen';
 import RecommendAlbumModal from './components/RecommendAlbumModal';
@@ -31,6 +32,12 @@ LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
 export default function App() {
   const app = useBSideApp();
+
+  const shouldShowAuthEntry =
+    !app.preferences.hasCompletedOnboarding ||
+    (app.preferences.sessionMode === 'member_preview' && !app.authSession?.user);
+  const shouldShowProfileSetup = app.isAuthenticated && app.needsProfileCompletion;
+  const shouldShowVerificationBanner = app.isAuthenticated && !app.isEmailVerified;
 
   if (app.isLoading) {
     return (
@@ -53,118 +60,168 @@ export default function App() {
     );
   }
 
-  if (!app.preferences.hasCompletedOnboarding) {
+  if (shouldShowAuthEntry) {
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={styles.mainContainer}>
+        <View style={styles.mainContainer}>
           <StatusBar barStyle="light-content" backgroundColor="#050816" />
           <OnboardingScreen
             currentUser={app.currentUser}
             authMessage={app.authMessage}
             isAuthBusy={app.isAuthBusy}
             isBackendConfigured={app.isBackendConfigured}
+            sessionMode={app.preferences.sessionMode}
+            initialStep={
+              app.preferences.sessionMode === 'member_preview' ? 'access' : 'intro'
+            }
             onContinueGuest={() => app.completeOnboarding('guest')}
             onRegisterRealAccount={app.registerRealAccount}
             onSignInRealAccount={app.signInRealAccount}
             onSendMagicLink={app.sendMagicLinkAccess}
             onSendPasswordReset={app.sendPasswordResetAccess}
+            onResendVerificationEmail={app.resendVerificationEmail}
           />
-        </SafeAreaView>
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (shouldShowProfileSetup) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.mainContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#050816" />
+          <AppBackground user={app.currentUser} />
+
+          {shouldShowVerificationBanner ? (
+            <EmailVerificationBanner
+              email={app.authSession?.user?.email || app.currentUser.email}
+              onResend={app.resendVerificationEmail}
+              onRefresh={app.refreshAuthenticatedUser}
+              isBusy={app.isAuthBusy}
+            />
+          ) : null}
+
+          <CompleteProfileScreen
+            currentUser={app.currentUser}
+            authMessage={app.authMessage}
+            isSaving={app.isProfileSaving || app.isAuthBusy}
+            isEmailVerified={app.isEmailVerified}
+            onSubmit={app.completeProfileSetup}
+            onSignOut={app.signOutBackendAccount}
+          />
+        </View>
       </SafeAreaProvider>
     );
   }
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.mainContainer}>
+      <View style={styles.mainContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#050816" />
+        <AppBackground user={app.currentUser} />
 
-        <NavigationContainer theme={navigationTheme}>
-          <View style={styles.mainContainer}>
-            <AppBackground user={app.currentUser} />
+        {shouldShowVerificationBanner ? (
+          <EmailVerificationBanner
+            email={app.authSession?.user?.email || app.currentUser.email}
+            onResend={app.resendVerificationEmail}
+            onRefresh={app.refreshAuthenticatedUser}
+            isBusy={app.isAuthBusy}
+          />
+        ) : null}
 
-            <AppNavigator app={app} />
+        <View style={styles.appSurface}>
+          <NavigationContainer theme={navigationTheme}>
+            <View style={styles.mainContainer}>
+              <AppNavigator app={app} />
 
-            <MiniPlayer
-              currentTrack={app.currentTrack}
-              onClose={app.closeTrack}
-              onOpenReview={app.openReviewWhileListening}
-            />
+              <MiniPlayer
+                currentTrack={app.currentTrack}
+                onClose={app.closeTrack}
+                onOpenReview={app.openReviewWhileListening}
+              />
 
-            <AddToListModal
-              visible={Boolean(app.listModalAlbum)}
-              lists={app.lists}
-              onClose={app.closeAddToList}
-              onSelect={app.addAlbumToList}
-            />
+              <AddToListModal
+                visible={Boolean(app.listModalAlbum)}
+                lists={app.lists}
+                onClose={app.closeAddToList}
+                onSelect={app.addAlbumToList}
+              />
 
-            <CreateListModal
-              visible={app.isCreateListVisible}
-              onClose={app.closeCreateListModal}
-              onSubmit={app.createList}
-              defaultIsPublic={!app.preferences.privateListsByDefault}
-            />
+              <CreateListModal
+                visible={app.isCreateListVisible}
+                onClose={app.closeCreateListModal}
+                onSubmit={app.createList}
+                defaultIsPublic={!app.preferences.privateListsByDefault}
+              />
 
-            <RecommendAlbumModal
-              visible={Boolean(app.recommendedAlbum)}
-              album={app.recommendedAlbum}
-              chats={app.visibleChats}
-              onClose={app.closeRecommendAlbum}
-              onSubmit={app.recommendAlbumToFriend}
-            />
+              <RecommendAlbumModal
+                visible={Boolean(app.recommendedAlbum)}
+                album={app.recommendedAlbum}
+                chats={app.visibleChats}
+                onClose={app.closeRecommendAlbum}
+                onSubmit={app.recommendAlbumToFriend}
+              />
 
-            <CreateReviewScreen
-              visible={app.isCreatingReview}
-              initialAlbum={
-                app.editingReview
-                  ? {
-                      title: app.editingReview.albumTitle,
-                      cover: app.editingReview.cover,
-                    }
-                  : app.reviewAlbum
-              }
-              initialText={app.editingReview?.text}
-              initialRating={app.editingReview?.rating}
-              contextType={app.reviewContext?.origin}
-              onCancel={app.closeReviewModal}
-              onPublish={app.publishReview}
-            />
+              <CreateReviewScreen
+                visible={app.isCreatingReview}
+                initialAlbum={
+                  app.editingReview
+                    ? {
+                        title: app.editingReview.albumTitle,
+                        cover: app.editingReview.cover,
+                      }
+                    : app.reviewAlbum
+                }
+                initialText={app.editingReview?.text}
+                initialRating={app.editingReview?.rating}
+                contextType={app.reviewContext?.origin}
+                onCancel={app.closeReviewModal}
+                onPublish={app.publishReview}
+              />
 
-            <ShareReviewCard
-              key={[
-                app.currentUser.name,
-                app.currentUser.avatarUrl,
-                app.currentUser.wallpaperUrl,
-                app.shareReview.album,
-                app.shareReview.text,
-              ].join('-')}
-              visible={app.isShareVisible}
-              onClose={app.closeShareProfile}
-              review={app.shareReview}
-              user={app.currentUser}
-            />
+              <ShareReviewCard
+                key={[
+                  app.currentUser.name,
+                  app.currentUser.avatarUrl,
+                  app.currentUser.wallpaperUrl,
+                  app.shareReview.album,
+                  app.shareReview.text,
+                ].join('-')}
+                visible={app.isShareVisible}
+                onClose={app.closeShareProfile}
+                review={app.shareReview}
+                user={app.currentUser}
+              />
 
-            <ShareStoryCard
-              key={[
-                app.currentUser.handle,
-                app.currentUser.wallpaperUrl,
-                ...app.top5.map((album) => album.id),
-              ].join('-')}
-              visible={app.isStoryVisible}
-              onClose={app.closeStoryCard}
-              albums={app.top5}
-              username={app.currentUser.handle}
-              user={app.currentUser}
-            />
-          </View>
-        </NavigationContainer>
-      </SafeAreaView>
+              <ShareStoryCard
+                key={[
+                  app.currentUser.handle,
+                  app.currentUser.wallpaperUrl,
+                  ...app.top5.map((album) => album.id),
+                ].join('-')}
+                visible={app.isStoryVisible}
+                onClose={app.closeStoryCard}
+                albums={app.top5}
+                username={app.currentUser.handle}
+                user={app.currentUser}
+              />
+            </View>
+          </NavigationContainer>
+        </View>
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1, backgroundColor: '#050816' },
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#050816',
+  },
+  appSurface: {
+    flex: 1,
+  },
   splashContainer: {
     flex: 1,
     backgroundColor: '#050816',

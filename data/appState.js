@@ -104,6 +104,7 @@ export const DEFAULT_CURRENT_USER = {
   handle: 'tu_lado_b',
   email: '',
   birthDate: '',
+  profileCompletedAt: '',
   plan: 'free',
   bio: 'B-Side Lab | Trap, drill y discos para escuchar de punta a punta.',
   avatarUrl: '',
@@ -119,6 +120,7 @@ export const DEFAULT_CURRENT_USER = {
 export const DEFAULT_PREFERENCES = {
   hasCompletedOnboarding: false,
   sessionMode: 'guest',
+  profileSetupRequired: false,
   notificationsEnabled: true,
   streakAlertsEnabled: true,
   analyticsEnabled: false,
@@ -234,6 +236,7 @@ export const normalizeUser = (user = {}) => {
     handle: baseUser.handle.replace('@', '') || DEFAULT_CURRENT_USER.handle,
     avatarColor: baseUser.avatarColor || createRandomColor(),
     birthDate: baseUser.birthDate || '',
+    profileCompletedAt: baseUser.profileCompletedAt || '',
     avatarModerationStatus:
       baseUser.avatarModerationStatus || DEFAULT_CURRENT_USER.avatarModerationStatus,
     themePreset: theme.id,

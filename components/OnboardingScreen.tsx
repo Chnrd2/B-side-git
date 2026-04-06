@@ -107,21 +107,26 @@ const getInitialName = (currentUser) => {
   return currentUser.name;
 };
 
+const resolveInitialStep = (value) => (value === 'access' ? 'access' : 'intro');
+
 const OnboardingScreen = ({
   currentUser,
   authMessage,
   isAuthBusy,
   isBackendConfigured,
+  initialStep = 'intro',
+  sessionMode = 'guest',
   onContinueGuest,
   onRegisterRealAccount,
   onSignInRealAccount,
   onSendMagicLink,
   onSendPasswordReset,
+  onResendVerificationEmail,
 }) => {
   const initialName = useMemo(() => getInitialName(currentUser), [currentUser]);
   const initialEmail = currentUser?.email || '';
 
-  const [step, setStep] = useState('intro');
+  const [step, setStep] = useState(resolveInitialStep(initialStep));
   const [mode, setMode] = useState('register');
   const [name, setName] = useState(initialName);
   const [handle, setHandle] = useState(buildHandleCandidate(initialName));
@@ -131,6 +136,11 @@ const OnboardingScreen = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [feedback, setFeedback] = useState(null);
   const [hasEditedHandle, setHasEditedHandle] = useState(false);
+  const isMemberPreview = sessionMode === 'member_preview';
+
+  useEffect(() => {
+    setStep(resolveInitialStep(initialStep));
+  }, [initialStep]);
 
   const helperText = useMemo(() => {
     if (feedback?.text) {
@@ -240,7 +250,7 @@ const OnboardingScreen = ({
     setFeedback({
       tone: 'success',
       text: response.data?.session?.user
-        ? 'La cuenta quedó conectada y lista para entrar.'
+        ? 'La cuenta quedó conectada y lista para completar el perfil.'
         : 'La cuenta ya se creó. Revisá tu email para confirmarla.',
     });
   };
@@ -319,8 +329,7 @@ const OnboardingScreen = ({
       setFeedback({
         tone: 'error',
         text:
-          response?.message ||
-          'No pudimos enviarte el email para cambiar la contraseña.',
+          response?.message || 'No pudimos enviarte el email para cambiar la contraseña.',
       });
       return;
     }
@@ -328,6 +337,23 @@ const OnboardingScreen = ({
     setFeedback({
       tone: 'success',
       text: 'Te enviamos un email para cambiar la contraseña.',
+    });
+  };
+
+  const handleResendVerification = async () => {
+    const response = await onResendVerificationEmail?.();
+
+    if (!response?.ok) {
+      setFeedback({
+        tone: 'error',
+        text: response?.message || 'No pudimos reenviar el email de verificación.',
+      });
+      return;
+    }
+
+    setFeedback({
+      tone: 'success',
+      text: 'Reenviamos el email de verificación. Revisá tu bandeja y spam.',
     });
   };
 
@@ -366,9 +392,7 @@ const OnboardingScreen = ({
       </TouchableOpacity>
 
       <Pressable style={styles.footnote} onPress={goToAccess}>
-        <Text style={styles.footnoteText}>
-          Tu lado B también merece un lugar propio.
-        </Text>
+        <Text style={styles.footnoteText}>Tu lado B también merece un lugar propio.</Text>
       </Pressable>
     </>
   );
@@ -423,6 +447,36 @@ const OnboardingScreen = ({
             Todavía no pudimos conectar el backend de esta instalación. Igual podés
             entrar como invitado y terminar la cuenta más adelante.
           </Text>
+        </View>
+      ) : null}
+
+      {isMemberPreview && email ? (
+        <View style={styles.noticeCard}>
+          <Text style={styles.noticeTitle}>Cuenta creada, falta verificar</Text>
+          <Text style={styles.noticeText}>
+            Ya registraste {email}. Confirmá el email y después iniciá sesión para
+            terminar de entrar con tu cuenta real.
+          </Text>
+          <View style={styles.noticeActions}>
+            <TouchableOpacity
+              style={styles.noticeActionPrimary}
+              onPress={handleResendVerification}
+              disabled={isAuthBusy}>
+              <Text style={styles.noticeActionPrimaryText}>
+                Reenviar verificación
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.noticeActionSecondary}
+              onPress={() => {
+                setMode('login');
+                resetFeedback();
+              }}>
+              <Text style={styles.noticeActionSecondaryText}>
+                Ya confirmé, iniciar sesión
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : null}
 
@@ -503,7 +557,7 @@ const OnboardingScreen = ({
             placeholder="Contraseña"
             placeholderTextColor="#666"
             value={password}
-            secureTextEntry
+            secureTextEntry={true}
             onChangeText={setPassword}
           />
         </View>
@@ -516,7 +570,7 @@ const OnboardingScreen = ({
               placeholder="Repetí tu contraseña"
               placeholderTextColor="#666"
               value={confirmPassword}
-              secureTextEntry
+              secureTextEntry={true}
               onChangeText={setConfirmPassword}
             />
           </View>
@@ -562,7 +616,10 @@ const OnboardingScreen = ({
         ) : null}
 
         <TouchableOpacity
-          style={[styles.secondaryButton, !isBackendConfigured && styles.disabledButton]}
+          style={[
+            styles.secondaryButton,
+            !isBackendConfigured && styles.disabledButton,
+          ]}
           onPress={submitMagicLink}
           disabled={isAuthBusy || !isBackendConfigured}>
           {isAuthBusy ? (
@@ -807,6 +864,38 @@ const styles = StyleSheet.create({
     color: '#FDE68A',
     fontSize: 13,
     lineHeight: 20,
+  },
+  noticeActions: {
+    marginTop: 6,
+    gap: 10,
+  },
+  noticeActionPrimary: {
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: '#A855F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  noticeActionPrimaryText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  noticeActionSecondary: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.24)',
+    backgroundColor: 'rgba(120, 53, 15, 0.14)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  noticeActionSecondaryText: {
+    color: '#FDE68A',
+    fontSize: 13,
+    fontWeight: '800',
   },
   formCard: {
     gap: 14,

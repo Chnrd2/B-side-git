@@ -31,7 +31,7 @@
 
 ## Seguridad minima razonable
 
-- Verificacion por mail.
+- Verificación por mail.
 - Rate limit en auth y endpoints sensibles.
 - RLS en tablas con datos del usuario.
 - Reportes y bloqueo.
@@ -42,7 +42,7 @@
 
 ### Free
 
-- Feed, busqueda, resenas y listas base.
+- Feed, búsqueda, reseñas y listas base.
 - Perfil publico.
 - Chat simple.
 - Personalizacion basica.

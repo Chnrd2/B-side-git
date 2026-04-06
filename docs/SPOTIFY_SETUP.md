@@ -18,7 +18,7 @@ En `Create app` completa asi:
 
 - `App name`: `B-Side`
 - `App description`:
-  `B-Side es una red social musical y plataforma de descubrimiento para verdaderos amantes de la musica. Permite resenar discos, seguir perfiles y descubrir albums desde una comunidad real.`
+`B-Side es una red social musical y plataforma de descubrimiento para verdaderos amantes de la música. Permite reseñar discos, seguir perfiles y descubrir álbumes desde una comunidad real.`
 - `Website`: dejalo vacio si Spotify te deja. Si te obliga, usa una URL real que controles.
 - `Redirect URI de desarrollo`: `http://127.0.0.1:19006/spotify/callback`
 

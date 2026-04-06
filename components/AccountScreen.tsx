@@ -12,12 +12,14 @@ import {
 import {
   BadgeCheck,
   ChevronLeft,
+  CircleHelp,
   LockKeyhole,
   LogOut,
   Mail,
   RefreshCw,
   Shield,
-  UserRound,
+  Smartphone,
+  Trash2,
 } from 'lucide-react-native';
 
 const formatBirthDate = (value = '') => {
@@ -40,15 +42,24 @@ const AccountScreen = ({
   onBack,
   onOpenAuth,
   onOpenPrivacy,
+  onOpenSessions,
+  onOpenHelp,
   onSendPasswordReset,
   onSyncSession,
+  onResendVerificationEmail,
+  onRefreshVerification,
+  onDeleteAccount,
   onSignOut,
 }) => {
   const email = authSession?.user?.email || currentUser?.email || '';
   const isAuthenticated =
     sessionMode === 'authenticated' && Boolean(authSession?.user);
   const isPreview = sessionMode === 'member_preview' && !isAuthenticated;
-  const isEmailVerified = Boolean(authSession?.user?.email_confirmed_at);
+  const isEmailVerified = Boolean(
+    authSession?.user?.email_confirmed_at || authSession?.user?.confirmed_at
+  );
+  const shouldShowVerificationActions =
+    Boolean(email) && (!isAuthenticated || !isEmailVerified);
 
   const handlePasswordReset = async () => {
     if (!email) {
@@ -81,7 +92,7 @@ const AccountScreen = ({
     if (response?.ok) {
       Alert.alert(
         'Cuenta sincronizada',
-        'Tu cuenta real y el perfil local ya quedaron alineados.'
+        'Actualizamos el estado real de tu cuenta y tu sesión.'
       );
       return;
     }
@@ -89,6 +100,75 @@ const AccountScreen = ({
     Alert.alert(
       'No pudimos sincronizarla',
       response?.message || 'Probá otra vez en un rato.'
+    );
+  };
+
+  const handleResendVerification = async () => {
+    const response = await onResendVerificationEmail?.();
+
+    if (response?.ok) {
+      Alert.alert(
+        'Email reenviado',
+        'Te volvimos a mandar el correo de verificación.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'No pudimos reenviarlo',
+      response?.message || 'Probá otra vez en unos segundos.'
+    );
+  };
+
+  const handleRefreshVerification = async () => {
+    const response = await onRefreshVerification?.();
+
+    if (response?.ok && response?.session?.user?.email_confirmed_at) {
+      Alert.alert('Email verificado', 'Tu cuenta ya figura como verificada.');
+      return;
+    }
+
+    if (response?.ok) {
+      Alert.alert(
+        'Todavía pendiente',
+        'Todavía no vemos la confirmación. Probá otra vez en unos segundos.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'No pudimos actualizarla',
+      response?.message || 'Probá otra vez en un rato.'
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Borrar cuenta',
+      'Esto va a borrar tu acceso, tu perfil y la información asociada. Esta acción no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar cuenta',
+          style: 'destructive',
+          onPress: async () => {
+            const response = await onDeleteAccount?.();
+
+            if (response?.ok) {
+              Alert.alert(
+                'Cuenta eliminada',
+                response?.message || 'La cuenta fue borrada correctamente.'
+              );
+              return;
+            }
+
+            Alert.alert(
+              'No pudimos borrarla',
+              response?.message || 'Probá otra vez en un rato.'
+            );
+          },
+        },
+      ]
     );
   };
 
@@ -136,31 +216,31 @@ const AccountScreen = ({
         </View>
 
         <View style={styles.heroCard}>
-          <Text style={styles.eyebrow}>CUENTA Y SESION</Text>
+          <Text style={styles.eyebrow}>CUENTA Y SESIÓN</Text>
           <Text style={styles.title}>
             {isAuthenticated
               ? 'Tu cuenta real ya está conectada'
               : isPreview
-                ? 'Tu cuenta ya está casi lista'
+                ? 'Tu cuenta quedó a mitad de camino'
                 : 'Todavía estás en modo invitado'}
           </Text>
           <Text style={styles.subtitle}>
             {isAuthenticated
-              ? 'Desde acá podés revisar el acceso, cambiar la contraseña y cerrar sesión sin perder tu perfil.'
+              ? 'Desde acá podés revisar acceso, verificación, sesiones y ayuda sin perder de vista lo importante.'
               : isPreview
-                ? 'Te faltan uno o dos pasos para dejar la cuenta lista y que todo quede guardado con tu identidad.'
-                : 'Si querés guardar tu progreso de verdad, este es el lugar para crear o conectar una cuenta.'}
+                ? 'Terminá de verificar el email y dejá el perfil listo para guardar todo con tu identidad.'
+                : 'Si querés guardar progreso de verdad, este es el lugar para crear o conectar una cuenta.'}
           </Text>
         </View>
 
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <View style={styles.summaryIcon}>
-              <UserRound color="#E9D5FF" size={18} />
+              <Smartphone color="#E9D5FF" size={18} />
             </View>
             <View style={styles.summaryCopy}>
               <Text style={styles.summaryTitle}>{currentUser?.name || 'Tu lado B'}</Text>
-              <Text style={styles.summaryHandle}>@{currentUser?.handle || 'tu_lado_b'}</Text>
+              <Text style={styles.summaryHandle}>@{currentUser?.handle || 'tu_handle'}</Text>
             </View>
             <View
               style={[
@@ -172,11 +252,7 @@ const AccountScreen = ({
                     : styles.statusPillMuted,
               ]}>
               <Text style={styles.statusPillText}>
-                {isAuthenticated
-                  ? 'Activa'
-                  : isPreview
-                    ? 'Pendiente'
-                    : 'Invitado'}
+                {isAuthenticated ? 'Activa' : isPreview ? 'Pendiente' : 'Invitado'}
               </Text>
             </View>
           </View>
@@ -196,8 +272,8 @@ const AccountScreen = ({
                     ? 'Email verificado'
                     : 'Email pendiente de verificar'
                   : isPreview
-                    ? 'Revisá tu email para activarla'
-                    : 'Todavía no aplica'}
+                    ? 'Pendiente de verificación'
+                    : 'No aplica todavía'}
               </Text>
             </View>
             <View style={styles.metaRow}>
@@ -221,8 +297,8 @@ const AccountScreen = ({
             <Text style={styles.sectionTitle}>Terminar acceso real</Text>
             <Text style={styles.sectionText}>
               {isPreview
-                ? 'Tu cuenta ya quedó creada. Si todavía no confirmaste el email, hacelo desde la bandeja y después volvé para iniciar sesión.'
-                : 'Pasá de invitado a cuenta real para guardar listas, reseñas, chats y recomendaciones con tu identidad.'}
+                ? 'Tu cuenta ya quedó creada. Revisá el email y después volvé a iniciar sesión para seguir.'
+                : 'Pasá de invitado a cuenta real para guardar listas, reseñas, chats y recomendaciones.'}
             </Text>
 
             <TouchableOpacity
@@ -239,7 +315,8 @@ const AccountScreen = ({
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Seguridad y cuenta</Text>
           <Text style={styles.sectionText}>
-            Mantené el acceso al día y revisá la parte sensible de tu perfil sin entrar en menús escondidos.
+            Mantené tu acceso al día y revisá la parte sensible de tu cuenta sin entrar en
+            menús escondidos.
           </Text>
 
           <TouchableOpacity
@@ -250,7 +327,7 @@ const AccountScreen = ({
             <View style={styles.actionCopy}>
               <Text style={styles.actionTitle}>Sincronizar cuenta</Text>
               <Text style={styles.actionDescription}>
-                Actualiza sesión, perfil y estado real del backend.
+                Actualiza la sesión, el perfil y el estado real del backend.
               </Text>
             </View>
           </TouchableOpacity>
@@ -270,34 +347,127 @@ const AccountScreen = ({
 
           <TouchableOpacity
             style={styles.actionRow}
+            onPress={onOpenSessions}
+            activeOpacity={0.86}>
+            <Smartphone color="#E9D5FF" size={18} />
+            <View style={styles.actionCopy}>
+              <Text style={styles.actionTitle}>Sesiones</Text>
+              <Text style={styles.actionDescription}>
+                Revisá este dispositivo y cerrá otras sesiones abiertas.
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionRow}
             onPress={onOpenPrivacy}
             activeOpacity={0.86}>
             <Shield color="#E9D5FF" size={18} />
             <View style={styles.actionCopy}>
               <Text style={styles.actionTitle}>Centro de privacidad</Text>
               <Text style={styles.actionDescription}>
-                Controlá quién ve tu actividad, tus listas y tus recomendaciones.
+                Controlá quién ve tu actividad, tus listas y tu perfil.
               </Text>
             </View>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={handleSignOut}
-          activeOpacity={0.9}
-          disabled={isAuthBusy}>
-          {isAuthBusy ? (
-            <ActivityIndicator color="white" />
-          ) : (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Verificación y ayuda</Text>
+          <Text style={styles.sectionText}>
+            {shouldShowVerificationActions
+              ? 'Si todavía no confirmaste el email, desde acá podés reenviarlo o refrescar el estado. También tenés ayuda y contacto.'
+              : 'Tu cuenta ya figura verificada. Igual te dejamos ayuda y contacto a mano por si necesitás soporte.'}
+          </Text>
+
+          {shouldShowVerificationActions ? (
             <>
-              <LogOut color="white" size={18} />
-              <Text style={styles.signOutButtonText}>
-                {isAuthenticated ? 'Cerrar sesión' : 'Salir del modo invitado'}
-              </Text>
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleResendVerification}
+                activeOpacity={0.86}>
+                <Mail color="#E9D5FF" size={18} />
+                <View style={styles.actionCopy}>
+                  <Text style={styles.actionTitle}>Reenviar email de verificación</Text>
+                  <Text style={styles.actionDescription}>
+                    Útil si el primer correo no llegó o quedó en spam.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionRow}
+                onPress={handleRefreshVerification}
+                activeOpacity={0.86}>
+                <BadgeCheck color="#E9D5FF" size={18} />
+                <View style={styles.actionCopy}>
+                  <Text style={styles.actionTitle}>Ya verifiqué</Text>
+                  <Text style={styles.actionDescription}>
+                    Refresca tu estado de verificación contra el backend.
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </>
+          ) : (
+            <View style={styles.verifiedCard}>
+              <BadgeCheck color="#4ADE80" size={18} />
+              <View style={styles.actionCopy}>
+                <Text style={styles.verifiedTitle}>Email verificado</Text>
+                <Text style={styles.actionDescription}>
+                  La cuenta ya quedó confirmada y lista para usar sin pasos pendientes.
+                </Text>
+              </View>
+            </View>
           )}
-        </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionRow}
+            onPress={onOpenHelp}
+            activeOpacity={0.86}>
+            <CircleHelp color="#E9D5FF" size={18} />
+            <View style={styles.actionCopy}>
+              <Text style={styles.actionTitle}>Ayuda</Text>
+              <Text style={styles.actionDescription}>
+                Contacto, preguntas frecuentes y soporte básico.
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Zona sensible</Text>
+          <Text style={styles.sectionText}>
+            Usá estas acciones solo si de verdad querés salir de la cuenta o borrar todo.
+          </Text>
+
+          <TouchableOpacity
+            style={[styles.signOutButton, isAuthBusy && styles.buttonDisabled]}
+            onPress={handleSignOut}
+            activeOpacity={0.9}
+            disabled={isAuthBusy}>
+            {isAuthBusy ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <>
+                <LogOut color="white" size={18} />
+                <Text style={styles.signOutButtonText}>
+                  {isAuthenticated ? 'Cerrar sesión' : 'Salir del modo invitado'}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {isAuthenticated ? (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={handleDeleteAccount}
+              activeOpacity={0.9}
+              disabled={isAuthBusy}>
+              <Trash2 color="#FECACA" size={18} />
+              <Text style={styles.deleteButtonText}>Borrar cuenta</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -505,6 +675,23 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     lineHeight: 18,
   },
+  verifiedCard: {
+    minHeight: 62,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(74,222,128,0.18)',
+    backgroundColor: 'rgba(20, 83, 45, 0.18)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  verifiedTitle: {
+    color: '#DCFCE7',
+    fontSize: 15,
+    fontWeight: '800',
+  },
   signOutButton: {
     minHeight: 54,
     borderRadius: 18,
@@ -518,6 +705,25 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 15,
     fontWeight: '800',
+  },
+  deleteButton: {
+    minHeight: 52,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.2)',
+    backgroundColor: 'rgba(69, 10, 10, 0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  deleteButtonText: {
+    color: '#FECACA',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  buttonDisabled: {
+    opacity: 0.65,
   },
 });
 

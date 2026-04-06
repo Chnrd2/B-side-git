@@ -59,8 +59,10 @@ import { loadAppState, saveAppState } from '../lib/storage';
 import {
   createBackendNotification,
   checkHandleAvailability,
+  consumeAuthRedirectUrl,
   createMessageRecord,
   getAuthenticatedProfileSnapshot,
+  getSupabaseClient,
   createListRecord,
   createListeningEventRecord,
   createReviewCommentRecord,
@@ -80,8 +82,11 @@ import {
   markBackendNotificationsAsRead,
   blockProfileByHandle,
   registerWithEmail,
+  resendSignupVerificationEmail,
   replaceListItemsRecord,
+  requestAccountDeletion,
   signInWithEmail,
+  signOutOtherSessions,
   signOutSession,
   sendMagicLink,
   sendPasswordReset,
@@ -234,6 +239,17 @@ const createAlbumKey = (title = '', artist = '') =>
   `${title}`.trim().toLowerCase() + `::${artist}`.trim().toLowerCase();
 
 const createArtistKey = (artist = '') => `${artist}`.trim().toLowerCase();
+const DEFAULT_HANDLE_CANDIDATES = new Set(['', 'tu_lado_b', 'user-me']);
+
+const hasCompletedPublicProfile = (user = {}) => {
+  const normalizedHandle = `${user?.handle || ''}`.trim().toLowerCase();
+
+  if (DEFAULT_HANDLE_CANDIDATES.has(normalizedHandle) || normalizedHandle.length < 3) {
+    return false;
+  }
+
+  return true;
+};
 
 const shuffleCollection = (items = []) =>
   [...items].sort(() => Math.random() - 0.5);
@@ -491,6 +507,16 @@ export default function useBSideApp() {
   );
   const currentUserHandle = normalizeHandle(
     currentUser?.handle || CURRENT_USER_HANDLE
+  );
+  const isAuthenticated = Boolean(
+    authSession?.user && preferences.sessionMode === 'authenticated'
+  );
+  const isEmailVerified = Boolean(
+    authSession?.user?.email_confirmed_at || authSession?.user?.confirmed_at
+  );
+  const needsProfileCompletion = Boolean(
+    authSession?.user &&
+      (preferences.profileSetupRequired || !hasCompletedPublicProfile(currentUser))
   );
 
   const shareReview = useMemo(() => {
@@ -1257,6 +1283,111 @@ export default function useBSideApp() {
   }, []);
 
   useEffect(() => {
+    if (!supabaseStatus.isConfigured) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    const client = getSupabaseClient();
+
+    if (!client) {
+      return undefined;
+    }
+
+    const applyIncomingUrl = async (url) => {
+      const result = await consumeAuthRedirectUrl(url);
+
+      if (!isMounted || result.skipped) {
+        return;
+      }
+
+      if (!result.ok) {
+        if (result.message) {
+          setAuthMessage(result.message);
+        }
+        return;
+      }
+
+      const refreshResult = await refreshAuthenticatedUser({
+        ...currentUser,
+        email: result.session?.user?.email || currentUser.email,
+      });
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (!refreshResult.ok && refreshResult.message) {
+        setAuthMessage(refreshResult.message);
+        return;
+      }
+
+      if (result.message) {
+        setAuthMessage(result.message);
+      }
+    };
+
+    void Linking.getInitialURL().then((url) => {
+      if (url) {
+        void applyIncomingUrl(url);
+      }
+    });
+
+    const linkingSubscription = Linking.addEventListener('url', ({ url }) => {
+      void applyIncomingUrl(url);
+    });
+
+    const {
+      data: { subscription },
+    } = client.auth.onAuthStateChange((event, session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (event === 'SIGNED_OUT') {
+        setAuthSession(null);
+        setPreferences((prevPreferences) => ({
+          ...prevPreferences,
+          sessionMode: 'guest',
+          profileSetupRequired: false,
+        }));
+        return;
+      }
+
+      if (!session?.user) {
+        return;
+      }
+
+      setAuthSession(session);
+      setCurrentUser((prevUser) => ({
+        ...prevUser,
+        id: session.user.id,
+        email: session.user.email || prevUser.email,
+      }));
+
+      if (
+        event === 'SIGNED_IN' ||
+        event === 'TOKEN_REFRESHED' ||
+        event === 'USER_UPDATED' ||
+        event === 'PASSWORD_RECOVERY'
+      ) {
+        setTimeout(() => {
+          void refreshAuthenticatedUser({
+            ...currentUser,
+            email: session.user.email || currentUser.email,
+          });
+        }, 0);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      linkingSubscription?.remove?.();
+      subscription?.unsubscribe?.();
+    };
+  }, [supabaseStatus.isConfigured]);
+
+  useEffect(() => {
     if (!hasHydrated || !spotifySession?.accessToken || !pendingSpotifyExportListId) {
       return;
     }
@@ -1309,6 +1440,9 @@ export default function useBSideApp() {
               ...nextPreferences,
               hasCompletedOnboarding: true,
               sessionMode: 'authenticated',
+              profileSetupRequired:
+                nextPreferences.profileSetupRequired ||
+                !hasCompletedPublicProfile(snapshot.user),
             };
 
             const remoteState = await loadAuthenticatedCollections({
@@ -2372,6 +2506,10 @@ export default function useBSideApp() {
     }
 
     applyAuthenticatedUser(snapshot.session, snapshot.user);
+    setPreferences((prevPreferences) => ({
+      ...prevPreferences,
+      profileSetupRequired: !hasCompletedPublicProfile(snapshot.user),
+    }));
 
     const remoteState = await loadAuthenticatedCollections({
       userId: snapshot.session.user.id,
@@ -3345,40 +3483,48 @@ export default function useBSideApp() {
       return response;
     }
 
+    const provisionalUser = {
+      ...initialState.currentUser,
+      name: normalizedName || currentUser.name,
+      handle: handleCheck.handle || currentUser.handle,
+      email: normalizedEmail,
+      birthDate: normalizedBirthDate || currentUser.birthDate || '',
+      bio: '',
+      avatarUrl: '',
+      wallpaperUrl: '',
+      profileCompletedAt: '',
+    };
+
     setCurrentUser((prevUser) => ({
       ...prevUser,
-      name: normalizedName || prevUser.name,
-      handle: handleCheck.handle || prevUser.handle,
-      email: normalizedEmail,
-      birthDate: normalizedBirthDate || prevUser.birthDate || '',
+      ...provisionalUser,
+      top5: prevUser.top5,
     }));
 
     if (response.data?.session?.user) {
       const ensuredProfile = await upsertProfile({
-        ...currentUser,
+        ...provisionalUser,
         id: response.data.session.user.id,
-        name: normalizedName || currentUser.name,
-        handle: handleCheck.handle || currentUser.handle,
-        email: normalizedEmail,
-        birthDate: normalizedBirthDate,
       });
 
       if (ensuredProfile.ok) {
         applyAuthenticatedUser(response.data.session, ensuredProfile.user);
       } else {
-        await refreshAuthenticatedUser({
-          ...currentUser,
-          name: normalizedName || currentUser.name,
-          handle: handleCheck.handle || currentUser.handle,
-          email: normalizedEmail,
-          birthDate: normalizedBirthDate,
-        });
+        await refreshAuthenticatedUser(provisionalUser);
       }
     } else {
       setPreferences((prevPreferences) => ({
         ...prevPreferences,
         hasCompletedOnboarding: true,
         sessionMode: 'member_preview',
+        profileSetupRequired: true,
+      }));
+    }
+
+    if (response.data?.session?.user) {
+      setPreferences((prevPreferences) => ({
+        ...prevPreferences,
+        profileSetupRequired: true,
       }));
     }
 
@@ -3423,6 +3569,10 @@ export default function useBSideApp() {
     });
 
     if (refreshResult.ok && refreshResult.session?.user) {
+      setPreferences((prevPreferences) => ({
+        ...prevPreferences,
+        profileSetupRequired: !hasCompletedPublicProfile(refreshResult.user),
+      }));
       pushNotification({
         type: 'security',
         title: 'Sesión iniciada',
@@ -3494,9 +3644,28 @@ export default function useBSideApp() {
 
   const signOutBackendAccount = async () => {
     if (!supabaseStatus.isConfigured || !authSession?.user) {
+      setCurrentUser(initialState.currentUser);
+      setReviews(initialState.reviews);
+      setWishlist(initialState.wishlist);
+      setListeningHistory(initialState.listeningHistory);
+      setLists(initialState.lists);
+      setTop5(initialState.top5);
+      setGlobalChats(initialState.chats);
+      setNotifications(initialState.notifications);
+      setFollowingHandles(initialState.followingHandles);
+      setBlockedHandles(initialState.blockedHandles);
+      setReports(initialState.reports);
+      setSpotifySession(null);
+      setSpotifyProfile(null);
+      setSpotifyExportStatus(null);
+      setPendingSpotifyExportListId('');
+      setCurrentTrack(null);
+      setOracleRecommendations([]);
       setPreferences((prevPreferences) => ({
         ...prevPreferences,
+        hasCompletedOnboarding: true,
         sessionMode: 'guest',
+        profileSetupRequired: false,
       }));
       return { ok: true };
     }
@@ -3507,9 +3676,28 @@ export default function useBSideApp() {
 
     if (response.ok) {
       setAuthSession(null);
+      setCurrentUser(initialState.currentUser);
+      setReviews(initialState.reviews);
+      setWishlist(initialState.wishlist);
+      setListeningHistory(initialState.listeningHistory);
+      setLists(initialState.lists);
+      setTop5(initialState.top5);
+      setGlobalChats(initialState.chats);
+      setNotifications(initialState.notifications);
+      setFollowingHandles(initialState.followingHandles);
+      setBlockedHandles(initialState.blockedHandles);
+      setReports(initialState.reports);
+      setSpotifySession(null);
+      setSpotifyProfile(null);
+      setSpotifyExportStatus(null);
+      setPendingSpotifyExportListId('');
+      setCurrentTrack(null);
+      setOracleRecommendations([]);
       setPreferences((prevPreferences) => ({
         ...prevPreferences,
+        hasCompletedOnboarding: true,
         sessionMode: 'guest',
+        profileSetupRequired: false,
       }));
       setAuthMessage('Sesión cerrada.');
       pushNotification({
@@ -3521,6 +3709,102 @@ export default function useBSideApp() {
     } else {
       setAuthMessage(response.message);
     }
+
+    return response;
+  };
+
+  const resendVerificationEmail = async () => {
+    const targetEmail = `${authSession?.user?.email || currentUser.email || ''}`
+      .trim()
+      .toLowerCase();
+
+    if (!targetEmail) {
+      return {
+        ok: false,
+        message: 'No encontramos un email para reenviar la verificación.',
+      };
+    }
+
+    setIsAuthBusy(true);
+
+    const response = await resendSignupVerificationEmail(targetEmail);
+
+    setIsAuthBusy(false);
+
+    if (response.ok) {
+      setAuthMessage('Reenviamos el email de verificación.');
+    } else if (response.message) {
+      setAuthMessage(response.message);
+    }
+
+    return response;
+  };
+
+  const signOutOtherBackendSessions = async () => {
+    if (!supabaseStatus.isConfigured || !authSession?.user) {
+      return {
+        ok: false,
+        message: 'No hay una sesión activa para cerrar en otros dispositivos.',
+      };
+    }
+
+    setIsAuthBusy(true);
+    const response = await signOutOtherSessions();
+    setIsAuthBusy(false);
+
+    if (response.ok) {
+      setAuthMessage('Cerramos las otras sesiones abiertas de esta cuenta.');
+    } else if (response.message) {
+      setAuthMessage(response.message);
+    }
+
+    return response;
+  };
+
+  const deleteBackendAccount = async () => {
+    if (!supabaseStatus.isConfigured || !authSession?.user) {
+      return {
+        ok: false,
+        message: 'Necesitás una sesión real activa para borrar la cuenta.',
+      };
+    }
+
+    setIsAuthBusy(true);
+    const response = await requestAccountDeletion();
+    setIsAuthBusy(false);
+
+    if (!response.ok) {
+      if (response.message) {
+        setAuthMessage(response.message);
+      }
+      return response;
+    }
+
+    setAuthSession(null);
+    setCurrentUser(initialState.currentUser);
+    setReviews(initialState.reviews);
+    setWishlist(initialState.wishlist);
+    setListeningHistory(initialState.listeningHistory);
+    setLists(initialState.lists);
+    setTop5(initialState.top5);
+    setGlobalChats(initialState.chats);
+    setNotifications(initialState.notifications);
+    setFollowingHandles(initialState.followingHandles);
+    setBlockedHandles(initialState.blockedHandles);
+    setReports(initialState.reports);
+    setSpotifySession(null);
+    setSpotifyProfile(null);
+    setSpotifyExportStatus(null);
+    setPendingSpotifyExportListId('');
+    setCurrentTrack(null);
+    setOracleRecommendations([]);
+    setPreferences({
+      ...initialState.preferences,
+      hasCompletedOnboarding: false,
+      sessionMode: 'guest',
+      profileSetupRequired: false,
+    });
+    setAuthMessage('La cuenta se borró y este dispositivo volvió al modo invitado.');
 
     return response;
   };
@@ -4371,6 +4655,30 @@ export default function useBSideApp() {
     }
   };
 
+  const completeProfileSetup = async (profileUpdates) => {
+    const completionTimestamp = new Date().toISOString();
+    const result = await saveProfile({
+      ...profileUpdates,
+      profileCompletedAt: completionTimestamp,
+    });
+
+    if (result?.ok || result?.skipped) {
+      setCurrentUser((prevUser) => ({
+        ...prevUser,
+        ...profileUpdates,
+        profileCompletedAt:
+          result?.user?.profileCompletedAt || completionTimestamp,
+      }));
+      setPreferences((prevPreferences) => ({
+        ...prevPreferences,
+        profileSetupRequired: false,
+      }));
+      setAuthMessage('Tu perfil quedó listo para entrar a la app.');
+    }
+
+    return result;
+  };
+
   const markChatAsRead = (chatId) => {
     const targetChat = globalChats.find((chat) => chat.id === chatId);
 
@@ -4631,6 +4939,9 @@ export default function useBSideApp() {
     spotifySession,
     spotifyProfile,
     authMessage,
+    isAuthenticated,
+    isEmailVerified,
+    needsProfileCompletion,
     isAuthBusy,
     isProfileSaving,
     isSpotifyExportBusy,
@@ -4679,6 +4990,9 @@ export default function useBSideApp() {
     sendMagicLinkAccess,
     sendPasswordResetAccess,
     signOutBackendAccount,
+    signOutOtherBackendSessions,
+    resendVerificationEmail,
+    deleteBackendAccount,
     refreshAuthenticatedUser,
     connectSpotifyAccount,
     disconnectSpotifyAccount,
@@ -4710,6 +5024,7 @@ export default function useBSideApp() {
     removeListItem,
     updateListOrder,
     saveProfile,
+    completeProfileSetup,
     markChatAsRead,
     sendChatMessage,
     handleShareAlbum: openRecommendAlbum,
