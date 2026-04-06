@@ -35,7 +35,9 @@ export default function App() {
 
   const shouldShowAuthEntry =
     !app.preferences.hasCompletedOnboarding ||
-    (app.preferences.sessionMode === 'member_preview' && !app.authSession?.user);
+    ((app.preferences.sessionMode === 'member_preview' ||
+      app.preferences.sessionMode === 'signed_out') &&
+      !app.authSession?.user);
   const shouldShowProfileSetup = app.isAuthenticated && app.needsProfileCompletion;
   const shouldShowVerificationBanner = app.isAuthenticated && !app.isEmailVerified;
 
@@ -72,7 +74,10 @@ export default function App() {
             isBackendConfigured={app.isBackendConfigured}
             sessionMode={app.preferences.sessionMode}
             initialStep={
-              app.preferences.sessionMode === 'member_preview' ? 'access' : 'intro'
+              app.preferences.sessionMode === 'member_preview' ||
+              app.preferences.sessionMode === 'signed_out'
+                ? 'access'
+                : 'intro'
             }
             onContinueGuest={() => app.completeOnboarding('guest')}
             onRegisterRealAccount={app.registerRealAccount}

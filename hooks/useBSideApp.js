@@ -486,6 +486,16 @@ export default function useBSideApp() {
   const [currentTrack, setCurrentTrack] = useState(null);
   const playbackResolutionCacheRef = useRef(new Map());
   const oracleHistoryRef = useRef([]);
+  const currentUserRef = useRef(initialState.currentUser);
+  const authSessionRef = useRef(null);
+  const top5Ref = useRef(initialState.top5);
+  const reviewsRef = useRef(initialState.reviews);
+  const listsRef = useRef(initialState.lists);
+  const followingHandlesRef = useRef(initialState.followingHandles);
+  const blockedHandlesRef = useRef(initialState.blockedHandles);
+  const reportsRef = useRef(initialState.reports);
+  const authSubscriptionRef = useRef(null);
+  const authRefreshSequenceRef = useRef(0);
   const [listModalAlbum, setListModalAlbum] = useState(null);
   const [isCreateListVisible, setIsCreateListVisible] = useState(false);
   const [isShareVisible, setIsShareVisible] = useState(false);
@@ -537,6 +547,119 @@ export default function useBSideApp() {
           user: currentUser.handle,
         };
   }, [currentUser.handle, currentUserHandle, reviews]);
+
+  const logAuthDebug = (scope, payload = {}) => {
+    console.log('[auth-sync]', scope, payload);
+  };
+
+  const clearUserScopedState = () => {
+    currentUserRef.current = initialState.currentUser;
+    top5Ref.current = initialState.top5;
+    reviewsRef.current = initialState.reviews;
+    listsRef.current = initialState.lists;
+    followingHandlesRef.current = initialState.followingHandles;
+    blockedHandlesRef.current = initialState.blockedHandles;
+    reportsRef.current = initialState.reports;
+    playbackResolutionCacheRef.current.clear();
+    oracleHistoryRef.current = [];
+    setCurrentUser(initialState.currentUser);
+    setReviews(initialState.reviews);
+    setWishlist(initialState.wishlist);
+    setListeningHistory(initialState.listeningHistory);
+    setLists(initialState.lists);
+    setTop5(initialState.top5);
+    setGlobalChats(initialState.chats);
+    setNotifications(initialState.notifications);
+    setFollowingHandles(initialState.followingHandles);
+    setBlockedHandles(initialState.blockedHandles);
+    setReports(initialState.reports);
+    setCommunityProfiles([]);
+    setSpotifySession(null);
+    setSpotifyProfile(null);
+    setSpotifyExportStatus(null);
+    setPendingSpotifyExportListId('');
+    setCurrentTrack(null);
+    setOracleRecommendations([]);
+    setOracleMessage('');
+  };
+
+  const resetToAuthEntry = ({
+    entry = 'access',
+    message = '',
+    keepOnboardingCompleted = true,
+  } = {}) => {
+    logAuthDebug('reset_to_auth_entry', {
+      entry,
+      keepOnboardingCompleted,
+      message,
+    });
+
+    authRefreshSequenceRef.current += 1;
+    authSessionRef.current = null;
+    setAuthSession(null);
+    clearUserScopedState();
+    setPreferences((prevPreferences) => ({
+      ...prevPreferences,
+      hasCompletedOnboarding: keepOnboardingCompleted,
+      sessionMode: entry === 'access' ? 'signed_out' : 'guest',
+      profileSetupRequired: false,
+    }));
+    setAuthMessage(message);
+  };
+
+  const buildAuthFallbackUser = (
+    sessionUser = {},
+    baseUser = currentUserRef.current,
+    forceFresh = false
+  ) => {
+    const sourceUser = forceFresh ? initialState.currentUser : baseUser;
+
+    return {
+      ...initialState.currentUser,
+      ...(forceFresh ? {} : sourceUser),
+      id: sessionUser?.id || sourceUser.id,
+      email: sessionUser?.email || sourceUser.email,
+      name:
+        sessionUser?.user_metadata?.display_name ||
+        sessionUser?.user_metadata?.full_name ||
+        sourceUser.name,
+      handle: sessionUser?.user_metadata?.handle || sourceUser.handle,
+      birthDate:
+        sessionUser?.user_metadata?.birth_date || sourceUser.birthDate || '',
+    };
+  };
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    authSessionRef.current = authSession;
+  }, [authSession]);
+
+  useEffect(() => {
+    top5Ref.current = top5;
+  }, [top5]);
+
+  useEffect(() => {
+    reviewsRef.current = reviews;
+  }, [reviews]);
+
+  useEffect(() => {
+    listsRef.current = lists;
+  }, [lists]);
+
+  useEffect(() => {
+    followingHandlesRef.current = followingHandles;
+  }, [followingHandles]);
+
+  useEffect(() => {
+    blockedHandlesRef.current = blockedHandles;
+  }, [blockedHandles]);
+
+  useEffect(() => {
+    reportsRef.current = reports;
+  }, [reports]);
 
   const hasUnreadMessages = useMemo(
     () =>
@@ -1308,10 +1431,14 @@ export default function useBSideApp() {
         return;
       }
 
-      const refreshResult = await refreshAuthenticatedUser({
-        ...currentUser,
-        email: result.session?.user?.email || currentUser.email,
-      });
+      const refreshResult = await refreshAuthenticatedUser(
+        buildAuthFallbackUser(
+          result.session?.user || {},
+          currentUserRef.current,
+          !authSessionRef.current?.user?.id
+        ),
+        { source: 'linking_redirect' }
+      );
 
       if (!isMounted) {
         return;
@@ -1337,6 +1464,8 @@ export default function useBSideApp() {
       void applyIncomingUrl(url);
     });
 
+    authSubscriptionRef.current?.unsubscribe?.();
+
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((event, session) => {
@@ -1344,13 +1473,22 @@ export default function useBSideApp() {
         return;
       }
 
+      const previousUserId = authSessionRef.current?.user?.id || '';
+      const nextUserId = session?.user?.id || '';
+      const userChanged = Boolean(previousUserId && nextUserId && previousUserId !== nextUserId);
+
+      logAuthDebug('on_auth_state_change', {
+        event,
+        previousUserId,
+        nextUserId,
+        userChanged,
+      });
+
       if (event === 'SIGNED_OUT') {
-        setAuthSession(null);
-        setPreferences((prevPreferences) => ({
-          ...prevPreferences,
-          sessionMode: 'guest',
-          profileSetupRequired: false,
-        }));
+        resetToAuthEntry({
+          entry: 'access',
+          message: 'Sesión cerrada.',
+        });
         return;
       }
 
@@ -1358,12 +1496,12 @@ export default function useBSideApp() {
         return;
       }
 
+      if (userChanged) {
+        clearUserScopedState();
+      }
+
+      authSessionRef.current = session;
       setAuthSession(session);
-      setCurrentUser((prevUser) => ({
-        ...prevUser,
-        id: session.user.id,
-        email: session.user.email || prevUser.email,
-      }));
 
       if (
         event === 'SIGNED_IN' ||
@@ -1372,18 +1510,28 @@ export default function useBSideApp() {
         event === 'PASSWORD_RECOVERY'
       ) {
         setTimeout(() => {
-          void refreshAuthenticatedUser({
-            ...currentUser,
-            email: session.user.email || currentUser.email,
-          });
+          void refreshAuthenticatedUser(
+            buildAuthFallbackUser(
+              session.user,
+              userChanged ? initialState.currentUser : currentUserRef.current,
+              userChanged
+            ),
+            {
+              source: `auth:${event}`,
+              userChanged,
+            }
+          );
         }, 0);
       }
     });
 
+    authSubscriptionRef.current = subscription;
+
     return () => {
       isMounted = false;
       linkingSubscription?.remove?.();
-      subscription?.unsubscribe?.();
+      authSubscriptionRef.current?.unsubscribe?.();
+      authSubscriptionRef.current = null;
     };
   }, [supabaseStatus.isConfigured]);
 
@@ -1419,6 +1567,11 @@ export default function useBSideApp() {
       let nextReports = persistedState.reports;
       let nextReviews = persistedState.reviews;
       let nextLists = persistedState.lists;
+      let nextWishlist = persistedState.wishlist;
+      let nextListeningHistory = persistedState.listeningHistory;
+      let nextGlobalChats = persistedState.chats;
+      let nextNotifications = persistedState.notifications;
+      let nextTop5 = persistedState.top5;
 
       if (supabaseStatus.isConfigured) {
         const snapshot = await getAuthenticatedProfileSnapshot(
@@ -1431,11 +1584,24 @@ export default function useBSideApp() {
           setAuthSession(snapshot.session || null);
 
           if (snapshot.session?.user) {
+            const userChanged =
+              persistedState.currentUser?.id &&
+              persistedState.currentUser.id !== snapshot.session.user.id;
+
             nextCurrentUser = {
-              ...nextCurrentUser,
+              ...(userChanged ? initialState.currentUser : nextCurrentUser),
               ...snapshot.user,
-              top5: persistedState.top5,
+              top5: userChanged ? initialState.top5 : persistedState.top5,
             };
+            nextWishlist = userChanged ? initialState.wishlist : persistedState.wishlist;
+            nextListeningHistory = userChanged
+              ? initialState.listeningHistory
+              : persistedState.listeningHistory;
+            nextGlobalChats = userChanged ? initialState.chats : persistedState.chats;
+            nextNotifications = userChanged
+              ? initialState.notifications
+              : persistedState.notifications;
+            nextTop5 = userChanged ? initialState.top5 : persistedState.top5;
             nextPreferences = {
               ...nextPreferences,
               hasCompletedOnboarding: true,
@@ -1448,11 +1614,15 @@ export default function useBSideApp() {
             const remoteState = await loadAuthenticatedCollections({
               userId: snapshot.session.user.id,
               fallbackHandle: snapshot.user.handle || nextCurrentUser.handle,
-              localReviews: persistedState.reviews,
-              localLists: persistedState.lists,
-              localFollowingHandles: persistedState.followingHandles,
-              localBlockedHandles: persistedState.blockedHandles,
-              localReports: persistedState.reports,
+              localReviews: userChanged ? initialState.reviews : persistedState.reviews,
+              localLists: userChanged ? initialState.lists : persistedState.lists,
+              localFollowingHandles: userChanged
+                ? initialState.followingHandles
+                : persistedState.followingHandles,
+              localBlockedHandles: userChanged
+                ? initialState.blockedHandles
+                : persistedState.blockedHandles,
+              localReports: userChanged ? initialState.reports : persistedState.reports,
             });
 
             if (!isMounted) return;
@@ -1476,12 +1646,12 @@ export default function useBSideApp() {
 
       setCurrentUser(nextCurrentUser);
       setReviews(nextReviews);
-      setWishlist(persistedState.wishlist);
-      setListeningHistory(persistedState.listeningHistory);
+      setWishlist(nextWishlist);
+      setListeningHistory(nextListeningHistory);
       setLists(nextLists);
-      setTop5(persistedState.top5);
-      setGlobalChats(persistedState.chats);
-      setNotifications(persistedState.notifications);
+      setTop5(nextTop5);
+      setGlobalChats(nextGlobalChats);
+      setNotifications(nextNotifications);
       setFollowingHandles(nextFollowingHandles);
       setBlockedHandles(nextBlockedHandles);
       setReports(nextReports);
@@ -2381,14 +2551,34 @@ export default function useBSideApp() {
     };
   };
 
-  const applyAuthenticatedUser = (session, nextUser) => {
-    setAuthSession(session || null);
-    setCurrentUser((prevUser) => ({
-      ...prevUser,
+  const applyAuthenticatedUser = (session, nextUser, options = {}) => {
+    const { userChanged = false } = options;
+    const resolvedTop5 = userChanged ? initialState.top5 : top5Ref.current;
+    const resolvedUser = {
+      ...(userChanged ? initialState.currentUser : currentUserRef.current),
       ...nextUser,
-      email: session?.user?.email || nextUser.email || prevUser.email,
-      top5,
-    }));
+      id: session?.user?.id || nextUser.id,
+      email:
+        session?.user?.email || nextUser.email || currentUserRef.current.email,
+      top5: resolvedTop5,
+    };
+
+    logAuthDebug('apply_authenticated_user', {
+      userId: resolvedUser.id,
+      sessionUserId: session?.user?.id || '',
+      userChanged,
+    });
+
+    authSessionRef.current = session || null;
+    currentUserRef.current = resolvedUser;
+    setAuthSession(session || null);
+    setCurrentUser(resolvedUser);
+
+    if (userChanged) {
+      top5Ref.current = initialState.top5;
+      setTop5(initialState.top5);
+    }
+
     setPreferences((prevPreferences) => ({
       ...prevPreferences,
       hasCompletedOnboarding: true,
@@ -2397,7 +2587,9 @@ export default function useBSideApp() {
   };
 
   const persistProfileToBackend = async (profileDraft) => {
-    if (!supabaseStatus.isConfigured || !authSession?.user?.id) {
+    const activeSession = authSessionRef.current;
+
+    if (!supabaseStatus.isConfigured || !activeSession?.user?.id) {
       return {
         ok: false,
         skipped: true,
@@ -2406,11 +2598,16 @@ export default function useBSideApp() {
     }
 
     let nextUser = {
-      ...currentUser,
+      ...currentUserRef.current,
       ...profileDraft,
-      id: authSession.user.id,
-      email: authSession.user.email || currentUser.email,
+      id: activeSession.user.id,
+      email: activeSession.user.email || currentUserRef.current.email,
     };
+
+    logAuthDebug('persist_profile_start', {
+      userId: activeSession.user.id,
+      handle: nextUser.handle,
+    });
 
     const avatarReview = reviewProfileAssetSource(nextUser.avatarUrl);
     const wallpaperReview = reviewProfileAssetSource(nextUser.wallpaperUrl);
@@ -2433,7 +2630,7 @@ export default function useBSideApp() {
       const uploadAvatar = await uploadProfileAsset({
         bucket: PROFILE_BUCKETS.avatar,
         fileUri: nextUser.avatarUrl,
-        userId: authSession.user.id,
+        userId: activeSession.user.id,
         prefix: 'avatar',
       });
 
@@ -2452,7 +2649,7 @@ export default function useBSideApp() {
       const uploadWallpaper = await uploadProfileAsset({
         bucket: PROFILE_BUCKETS.wallpaper,
         fileUri: nextUser.wallpaperUrl,
-        userId: authSession.user.id,
+        userId: activeSession.user.id,
         prefix: 'wallpaper',
       });
 
@@ -2477,13 +2674,16 @@ export default function useBSideApp() {
       ok: true,
       user: {
         ...saveProfileResult.user,
-        email: authSession.user.email || nextUser.email,
-        top5,
+        email: activeSession.user.email || nextUser.email,
+        top5: top5Ref.current,
       },
     };
   };
 
-  const refreshAuthenticatedUser = async (fallbackUser = currentUser) => {
+  const refreshAuthenticatedUser = async (
+    fallbackUser = currentUserRef.current,
+    options = {}
+  ) => {
     if (!supabaseStatus.isConfigured) {
       return {
         ok: false,
@@ -2491,21 +2691,54 @@ export default function useBSideApp() {
       };
     }
 
+    const refreshSequence = ++authRefreshSequenceRef.current;
+    const previousUserId = authSessionRef.current?.user?.id || '';
+
+    logAuthDebug('refresh_authenticated_user:start', {
+      refreshSequence,
+      source: options.source || 'manual',
+      previousUserId,
+      fallbackUserId: fallbackUser?.id || '',
+    });
+
     const snapshot = await getAuthenticatedProfileSnapshot(fallbackUser);
 
+    if (refreshSequence !== authRefreshSequenceRef.current) {
+      logAuthDebug('refresh_authenticated_user:stale_after_snapshot', {
+        refreshSequence,
+      });
+      return { ok: false, skipped: true };
+    }
+
     if (!snapshot.ok) {
+      logAuthDebug('refresh_authenticated_user:error', {
+        refreshSequence,
+        message: snapshot.message,
+      });
       return snapshot;
     }
 
     if (!snapshot.session?.user) {
-      setAuthSession(null);
+      resetToAuthEntry({
+        entry: 'access',
+        message: 'No encontramos una sesión activa.',
+      });
       return {
         ok: true,
         session: null,
       };
     }
 
-    applyAuthenticatedUser(snapshot.session, snapshot.user);
+    const nextUserId = snapshot.session.user.id;
+    const userChanged = Boolean(
+      options.userChanged || (previousUserId && previousUserId !== nextUserId)
+    );
+
+    if (userChanged) {
+      clearUserScopedState();
+    }
+
+    applyAuthenticatedUser(snapshot.session, snapshot.user, { userChanged });
     setPreferences((prevPreferences) => ({
       ...prevPreferences,
       profileSetupRequired: !hasCompletedPublicProfile(snapshot.user),
@@ -2514,18 +2747,35 @@ export default function useBSideApp() {
     const remoteState = await loadAuthenticatedCollections({
       userId: snapshot.session.user.id,
       fallbackHandle: snapshot.user.handle || fallbackUser.handle,
-      localReviews: reviews,
-      localLists: lists,
-      localFollowingHandles: followingHandles,
-      localBlockedHandles: blockedHandles,
-      localReports: reports,
+      localReviews: userChanged ? initialState.reviews : reviewsRef.current,
+      localLists: userChanged ? initialState.lists : listsRef.current,
+      localFollowingHandles: userChanged
+        ? initialState.followingHandles
+        : followingHandlesRef.current,
+      localBlockedHandles: userChanged
+        ? initialState.blockedHandles
+        : blockedHandlesRef.current,
+      localReports: userChanged ? initialState.reports : reportsRef.current,
     });
+
+    if (refreshSequence !== authRefreshSequenceRef.current) {
+      logAuthDebug('refresh_authenticated_user:stale_after_remote', {
+        refreshSequence,
+      });
+      return { ok: false, skipped: true };
+    }
 
     setReviews(remoteState.reviews);
     setLists(remoteState.lists);
     setFollowingHandles(remoteState.followingHandles);
     setBlockedHandles(remoteState.blockedHandles);
     setReports(remoteState.reports);
+
+    reviewsRef.current = remoteState.reviews;
+    listsRef.current = remoteState.lists;
+    followingHandlesRef.current = remoteState.followingHandles;
+    blockedHandlesRef.current = remoteState.blockedHandles;
+    reportsRef.current = remoteState.reports;
 
     if (remoteState.message) {
       setAuthMessage(remoteState.message);
@@ -3456,7 +3706,26 @@ export default function useBSideApp() {
     setIsAuthBusy(true);
     setAuthMessage('');
 
-    const handleCheck = await checkHandleAvailability(handle, authSession?.user?.id);
+    if (authSessionRef.current?.user?.id) {
+      logAuthDebug('register_real_account:pre_sign_out', {
+        existingUserId: authSessionRef.current.user.id,
+        email: normalizedEmail,
+      });
+      const signOutResult = await signOutSession();
+
+      if (!signOutResult.ok) {
+        setIsAuthBusy(false);
+        setAuthMessage(signOutResult.message);
+        return signOutResult;
+      }
+
+      resetToAuthEntry({ entry: 'access', message: '' });
+    }
+
+    const handleCheck = await checkHandleAvailability(
+      handle,
+      authSessionRef.current?.user?.id
+    );
 
     if (!handleCheck.ok || !handleCheck.available) {
       setIsAuthBusy(false);
@@ -3495,6 +3764,11 @@ export default function useBSideApp() {
       profileCompletedAt: '',
     };
 
+    currentUserRef.current = {
+      ...initialState.currentUser,
+      ...provisionalUser,
+      top5: top5Ref.current,
+    };
     setCurrentUser((prevUser) => ({
       ...prevUser,
       ...provisionalUser,
@@ -3508,9 +3782,14 @@ export default function useBSideApp() {
       });
 
       if (ensuredProfile.ok) {
-        applyAuthenticatedUser(response.data.session, ensuredProfile.user);
+        applyAuthenticatedUser(response.data.session, ensuredProfile.user, {
+          userChanged: true,
+        });
       } else {
-        await refreshAuthenticatedUser(provisionalUser);
+        await refreshAuthenticatedUser(provisionalUser, {
+          source: 'register',
+          userChanged: true,
+        });
       }
     } else {
       setPreferences((prevPreferences) => ({
@@ -3551,6 +3830,22 @@ export default function useBSideApp() {
     setIsAuthBusy(true);
     setAuthMessage('');
 
+    if (authSessionRef.current?.user?.id) {
+      logAuthDebug('sign_in_real_account:pre_sign_out', {
+        existingUserId: authSessionRef.current.user.id,
+        email: normalizedEmail,
+      });
+      const signOutResult = await signOutSession();
+
+      if (!signOutResult.ok) {
+        setIsAuthBusy(false);
+        setAuthMessage(signOutResult.message);
+        return signOutResult;
+      }
+
+      resetToAuthEntry({ entry: 'access', message: '' });
+    }
+
     const response = await signInWithEmail({
       email: normalizedEmail,
       password,
@@ -3562,11 +3857,17 @@ export default function useBSideApp() {
       return response;
     }
 
-    const refreshResult = await refreshAuthenticatedUser({
-      ...currentUser,
-      id: response.data?.user?.id || currentUser.id,
-      email: normalizedEmail,
-    });
+    const refreshResult = await refreshAuthenticatedUser(
+      buildAuthFallbackUser(
+        response.data?.user || response.data?.session?.user || {},
+        initialState.currentUser,
+        true
+      ),
+      {
+        source: 'sign_in',
+        userChanged: true,
+      }
+    );
 
     if (refreshResult.ok && refreshResult.session?.user) {
       setPreferences((prevPreferences) => ({
@@ -3643,30 +3944,11 @@ export default function useBSideApp() {
   };
 
   const signOutBackendAccount = async () => {
-    if (!supabaseStatus.isConfigured || !authSession?.user) {
-      setCurrentUser(initialState.currentUser);
-      setReviews(initialState.reviews);
-      setWishlist(initialState.wishlist);
-      setListeningHistory(initialState.listeningHistory);
-      setLists(initialState.lists);
-      setTop5(initialState.top5);
-      setGlobalChats(initialState.chats);
-      setNotifications(initialState.notifications);
-      setFollowingHandles(initialState.followingHandles);
-      setBlockedHandles(initialState.blockedHandles);
-      setReports(initialState.reports);
-      setSpotifySession(null);
-      setSpotifyProfile(null);
-      setSpotifyExportStatus(null);
-      setPendingSpotifyExportListId('');
-      setCurrentTrack(null);
-      setOracleRecommendations([]);
-      setPreferences((prevPreferences) => ({
-        ...prevPreferences,
-        hasCompletedOnboarding: true,
-        sessionMode: 'guest',
-        profileSetupRequired: false,
-      }));
+    if (!supabaseStatus.isConfigured || !authSessionRef.current?.user) {
+      resetToAuthEntry({
+        entry: 'access',
+        message: 'Sesión cerrada.',
+      });
       return { ok: true };
     }
 
@@ -3675,36 +3957,9 @@ export default function useBSideApp() {
     setIsAuthBusy(false);
 
     if (response.ok) {
-      setAuthSession(null);
-      setCurrentUser(initialState.currentUser);
-      setReviews(initialState.reviews);
-      setWishlist(initialState.wishlist);
-      setListeningHistory(initialState.listeningHistory);
-      setLists(initialState.lists);
-      setTop5(initialState.top5);
-      setGlobalChats(initialState.chats);
-      setNotifications(initialState.notifications);
-      setFollowingHandles(initialState.followingHandles);
-      setBlockedHandles(initialState.blockedHandles);
-      setReports(initialState.reports);
-      setSpotifySession(null);
-      setSpotifyProfile(null);
-      setSpotifyExportStatus(null);
-      setPendingSpotifyExportListId('');
-      setCurrentTrack(null);
-      setOracleRecommendations([]);
-      setPreferences((prevPreferences) => ({
-        ...prevPreferences,
-        hasCompletedOnboarding: true,
-        sessionMode: 'guest',
-        profileSetupRequired: false,
-      }));
-      setAuthMessage('Sesión cerrada.');
-      pushNotification({
-        type: 'security',
-        title: 'Sesión cerrada',
-        body: 'La cuenta real se desconectó de este dispositivo.',
-        read: true,
+      resetToAuthEntry({
+        entry: 'access',
+        message: 'Sesión cerrada.',
       });
     } else {
       setAuthMessage(response.message);
@@ -3714,7 +3969,9 @@ export default function useBSideApp() {
   };
 
   const resendVerificationEmail = async () => {
-    const targetEmail = `${authSession?.user?.email || currentUser.email || ''}`
+    const targetEmail = `${
+      authSessionRef.current?.user?.email || currentUserRef.current.email || ''
+    }`
       .trim()
       .toLowerCase();
 
@@ -3741,7 +3998,7 @@ export default function useBSideApp() {
   };
 
   const signOutOtherBackendSessions = async () => {
-    if (!supabaseStatus.isConfigured || !authSession?.user) {
+    if (!supabaseStatus.isConfigured || !authSessionRef.current?.user) {
       return {
         ok: false,
         message: 'No hay una sesión activa para cerrar en otros dispositivos.',
@@ -3762,7 +4019,7 @@ export default function useBSideApp() {
   };
 
   const deleteBackendAccount = async () => {
-    if (!supabaseStatus.isConfigured || !authSession?.user) {
+    if (!supabaseStatus.isConfigured || !authSessionRef.current?.user) {
       return {
         ok: false,
         message: 'Necesitás una sesión real activa para borrar la cuenta.',
@@ -3774,37 +4031,21 @@ export default function useBSideApp() {
     setIsAuthBusy(false);
 
     if (!response.ok) {
+      logAuthDebug('delete_account:error', {
+        message: response.message,
+        details: response.details || null,
+      });
       if (response.message) {
         setAuthMessage(response.message);
       }
       return response;
     }
 
-    setAuthSession(null);
-    setCurrentUser(initialState.currentUser);
-    setReviews(initialState.reviews);
-    setWishlist(initialState.wishlist);
-    setListeningHistory(initialState.listeningHistory);
-    setLists(initialState.lists);
-    setTop5(initialState.top5);
-    setGlobalChats(initialState.chats);
-    setNotifications(initialState.notifications);
-    setFollowingHandles(initialState.followingHandles);
-    setBlockedHandles(initialState.blockedHandles);
-    setReports(initialState.reports);
-    setSpotifySession(null);
-    setSpotifyProfile(null);
-    setSpotifyExportStatus(null);
-    setPendingSpotifyExportListId('');
-    setCurrentTrack(null);
-    setOracleRecommendations([]);
-    setPreferences({
-      ...initialState.preferences,
-      hasCompletedOnboarding: false,
-      sessionMode: 'guest',
-      profileSetupRequired: false,
+    resetToAuthEntry({
+      entry: 'intro',
+      keepOnboardingCompleted: false,
+      message: 'La cuenta se borró y este dispositivo volvió al inicio.',
     });
-    setAuthMessage('La cuenta se borró y este dispositivo volvió al modo invitado.');
 
     return response;
   };
@@ -4576,13 +4817,14 @@ export default function useBSideApp() {
   };
 
   const saveProfile = async (profileUpdates) => {
+    const activeSession = authSessionRef.current;
     const nextHandle =
       sanitizeProfileHandle(profileUpdates.handle || currentUser.handle) ||
       currentUser.handle;
 
     const handleCheck = await checkHandleAvailability(
       nextHandle,
-      authSession?.user?.id
+      activeSession?.user?.id
     );
 
     if (!handleCheck.ok || !handleCheck.available) {
@@ -4615,12 +4857,13 @@ export default function useBSideApp() {
     };
 
     setIsProfileSaving(true);
+    currentUserRef.current = localDraft;
     setCurrentUser(localDraft);
 
     try {
       let backendResult = null;
 
-      if (authSession?.user) {
+      if (activeSession?.user) {
         backendResult = await persistProfileToBackend(localDraft);
 
         if (!backendResult.ok && !backendResult.skipped) {
@@ -4636,6 +4879,7 @@ export default function useBSideApp() {
         }
 
         if (backendResult?.ok) {
+          currentUserRef.current = backendResult.user;
           setCurrentUser(backendResult.user);
         }
       }
@@ -4643,7 +4887,7 @@ export default function useBSideApp() {
       pushNotification({
         type: 'product',
         title: 'Perfil actualizado',
-        body: authSession?.user
+        body: activeSession?.user
           ? 'Foto, fondo y datos del perfil quedaron sincronizados.'
           : 'Foto, fondo y datos del perfil quedaron guardados.',
         read: true,
@@ -4663,12 +4907,16 @@ export default function useBSideApp() {
     });
 
     if (result?.ok || result?.skipped) {
-      setCurrentUser((prevUser) => ({
-        ...prevUser,
+      const resolvedUser = {
+        ...currentUserRef.current,
         ...profileUpdates,
+        ...(result?.user || {}),
         profileCompletedAt:
           result?.user?.profileCompletedAt || completionTimestamp,
-      }));
+      };
+
+      currentUserRef.current = resolvedUser;
+      setCurrentUser(resolvedUser);
       setPreferences((prevPreferences) => ({
         ...prevPreferences,
         profileSetupRequired: false,
