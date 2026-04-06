@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import AlbumDetailScreen from '../components/AlbumDetailScreen';
+import AccountScreen from '../components/AccountScreen';
 import ArtistProfileScreen from '../components/ArtistProfileScreen';
 import AuthPreviewScreen from '../components/AuthPreviewScreen';
 import ChatScreen from '../components/ChatScreen';
@@ -125,6 +126,7 @@ function MainTabs({ app }) {
             onEditReview={app.openEditReview}
             onShareProfile={app.openShareProfile}
             onOpenStory={app.openStoryCard}
+            onOpenAccount={() => navigation.getParent()?.navigate('Account')}
             onOpenFoundation={() =>
               navigation.getParent()?.navigate('ProductFoundation')
             }
@@ -365,6 +367,24 @@ export default function AppNavigator({ app }) {
             onOpenLegal={() => navigation.navigate('LegalCenter')}
             onOpenPlans={() => navigation.navigate('Plans')}
             onConnectSpotify={app.connectSpotifyAccount}
+          />
+        )}
+      </RootStack.Screen>
+
+      <RootStack.Screen name="Account">
+        {({ navigation }) => (
+          <AccountScreen
+            currentUser={app.currentUser}
+            authSession={app.authSession}
+            authMessage={app.authMessage}
+            isAuthBusy={app.isAuthBusy}
+            sessionMode={app.preferences.sessionMode}
+            onBack={() => navigation.goBack()}
+            onOpenAuth={() => navigation.navigate('AuthPreview')}
+            onOpenPrivacy={() => navigation.navigate('PrivacyCenter')}
+            onSendPasswordReset={app.sendPasswordResetAccess}
+            onSyncSession={app.refreshAuthenticatedUser}
+            onSignOut={app.signOutBackendAccount}
           />
         )}
       </RootStack.Screen>

@@ -167,7 +167,7 @@ const AlbumDetailScreen = ({
 
     if (!tracks.length) {
       return albumPlaybackState.mode === 'external'
-        ? 'Este lanzamiento no trajo audio reproducible, pero dejamos listo el salto al origen para que sigas escuchando afuera.'
+        ? 'Este lanzamiento no trajo audio reproducible en B-Side, pero dejamos listo el salto al origen para que sigas escuchando afuera.'
         : 'Este álbum no trajo audio usable en B-Side, aunque igual podés guardarlo, reseñarlo o seguir al artista.';
     }
 
@@ -199,8 +199,13 @@ const AlbumDetailScreen = ({
 
     return [
       {
-        label: 'Fuente',
-        value: album.source === 'spotify' ? 'Spotify' : 'B-Side',
+        label: 'Catálogo',
+        value:
+          album.source === 'spotify'
+            ? 'Spotify'
+            : album.source === 'itunes'
+              ? 'iTunes'
+              : 'B-Side',
       },
       {
         label: 'Con audio',
@@ -326,7 +331,7 @@ const AlbumDetailScreen = ({
                 style={styles.secondaryAction}
                 onPress={handlePlayToggle}>
                 <ExternalLink color="#C4B5FD" size={16} />
-                <Text style={styles.secondaryActionText}>Abrir release</Text>
+                <Text style={styles.secondaryActionText}>Abrir lanzamiento</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -379,7 +384,7 @@ const AlbumDetailScreen = ({
             <View style={styles.sectionTitleGroup}>
               <Text style={styles.sectionTitle}>Canciones del álbum</Text>
               <Text style={styles.sectionSubtitle}>
-                Tocá un track para reproducirlo o abrirlo si el catálogo no trae preview.
+                Tocá un track para escuchar la muestra o abrirlo afuera si el catálogo no trae audio.
               </Text>
             </View>
             {album.source ? (

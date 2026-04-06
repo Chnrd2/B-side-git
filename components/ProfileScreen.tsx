@@ -18,6 +18,7 @@ import {
   Flag,
   Headphones,
   ListMusic,
+  LockKeyhole,
   LogOut,
   Radio,
   Send,
@@ -55,6 +56,7 @@ const ProfileScreen = ({
   onEditReview,
   onShareProfile,
   onOpenStory,
+  onOpenAccount,
   onOpenFoundation,
   onOpenPrivacy,
   onSaveProfile,
@@ -646,6 +648,15 @@ const ProfileScreen = ({
                 <X color="white" size={24} />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => {
+                setIsSettingsVisible(false);
+                onOpenAccount?.();
+              }}>
+              <LockKeyhole color="#A855F7" size={20} />
+              <Text style={styles.settingText}>Cuenta y sesión</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => {
