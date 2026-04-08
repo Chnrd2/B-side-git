@@ -63,7 +63,7 @@ const DiscoveryAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => 
           onPress={() => onPlaySong?.(album)}>
           <Headphones color="white" size={14} />
           <Text style={styles.discoveryButtonText}>
-            {playbackState.mode === 'preview' ? 'Escuchar' : 'Abrir'}
+            {playbackState.mode === 'preview' ? 'Escuchar muestra' : 'Abrir'}
           </Text>
         </TouchableOpacity>
       ) : null}
@@ -129,7 +129,7 @@ const OracleAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
           onPress={() => onPlaySong?.(album)}>
           <Headphones color="white" size={14} />
           <Text style={styles.oracleResultButtonText}>
-            {playbackState.mode === 'preview' ? 'Escuchar' : 'Abrir'}
+            {playbackState.mode === 'preview' ? 'Escuchar muestra' : 'Abrir'}
           </Text>
         </TouchableOpacity>
       ) : null}
@@ -187,8 +187,8 @@ const SearchScreen = ({
   const oracleHelperText =
     oracleMessage ||
     (trimmedQuery.length >= 2
-      ? `Si querés, usamos "${trimmedQuery}" como pista extra para afinar la tanda.`
-      : 'Pedile una tanda nueva cuando quieras salir del loop sin perder tu identidad musical.');
+      ? `Podemos usar "${trimmedQuery}" como pista extra para afinar la tanda.`
+      : 'Pedí otra tanda cuando quieras salir del loop sin perder tu identidad musical.');
 
   const searchMusic = async (term) => {
     if (term.length < 2) {
@@ -336,7 +336,7 @@ const SearchScreen = ({
                   ? 'Cruza tu Top 5, tus reseñas y tus escuchas para acercarte algo nuevo sin perder tu identidad musical.'
                   : isSearching
                     ? 'Buscá tranquilo: el Oráculo se resume para no taparte los resultados.'
-                    : 'Pedile una nueva tanda cuando quieras abrir un poco el radar sin salirte de tu eje.'}
+                    : 'Pedí una nueva tanda cuando quieras abrir el radar sin perder tu eje.'}
               </Text>
             </View>
 
@@ -406,11 +406,10 @@ const SearchScreen = ({
               <View style={styles.discoverySection}>
                 <Text style={styles.discoveryEyebrow}>DESCUBRIR</Text>
                 <Text style={styles.discoverySectionTitle}>
-                  Álbumes interesantes para vos
+                  Álbumes para vos
                 </Text>
                 <Text style={styles.discoverySectionText}>
-                  Se nutren de tus reseñas, listas, escuchas y la actividad de la
-                  comunidad.
+                  Se apoyan en tus reseñas, tus listas, tus escuchas y lo que se mueve en la comunidad.
                 </Text>
 
                 <ScrollView
@@ -438,8 +437,7 @@ const SearchScreen = ({
                   Gente y sonidos para seguir explorando
                 </Text>
                 <Text style={styles.discoverySectionText}>
-                  Se apoyan en tus reseñas, tus listas y lo que se está moviendo en
-                  la comunidad que más te puede gustar.
+                  Se apoyan en tus reseñas, tus listas y lo que más se acerca a tu gusto.
                 </Text>
 
                 <ScrollView
@@ -465,8 +463,7 @@ const SearchScreen = ({
                   El radar todavía se está armando
                 </Text>
                 <Text style={styles.discoveryEmptyText}>
-                  Sumá más reseñas, listas o escuchas para que B-Side empiece a
-                  devolverte una tanda más afinada.
+                  Sumá más reseñas, listas o escuchas para que B-Side te devuelva recomendaciones más afinadas.
                 </Text>
               </View>
             ) : null}
@@ -491,8 +488,7 @@ const SearchScreen = ({
             </Text>
             {!spotifyCatalogReady ? (
               <Text style={styles.emptyHelper}>
-                Si buscabas algo más de nicho o nuevo, probablemente falte activar
-                Spotify en el catálogo.
+                Si buscabas algo más de nicho o nuevo, probablemente falte activar Spotify en el catálogo.
               </Text>
             ) : null}
           </View>

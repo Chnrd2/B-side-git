@@ -26,12 +26,12 @@ const ACCESS_MODES = [
   {
     id: 'register',
     title: 'Crear cuenta',
-    description: 'Guardá tu progreso, elegí tu @ y dejá listo tu perfil real.',
+    description: 'Guardá tu progreso, elegí tu @ y dejá tu perfil listo.',
   },
   {
     id: 'login',
     title: 'Iniciar sesión',
-    description: 'Entrá con tu cuenta para recuperar listas, reseñas y chats.',
+    description: 'Entrá para recuperar tus listas, reseñas y chats.',
   },
 ];
 
@@ -250,8 +250,8 @@ const OnboardingScreen = ({
     setFeedback({
       tone: 'success',
       text: response.data?.session?.user
-        ? 'La cuenta quedó conectada y lista para completar el perfil.'
-        : 'La cuenta ya se creó. Revisá tu email para confirmarla.',
+        ? 'Tu cuenta ya está lista para completar el perfil.'
+        : 'Revisá tu email para activar tu cuenta.',
     });
   };
 
@@ -281,7 +281,7 @@ const OnboardingScreen = ({
 
     setFeedback({
       tone: 'success',
-      text: 'Sesión iniciada. Tu cuenta real ya está activa.',
+      text: 'Ya entraste con tu cuenta.',
     });
   };
 
@@ -308,7 +308,7 @@ const OnboardingScreen = ({
 
     setFeedback({
       tone: 'success',
-      text: 'Te mandamos un enlace de acceso por email. Revisá tu bandeja.',
+      text: 'Te mandamos un enlace para entrar. Revisá tu bandeja.',
     });
   };
 
@@ -318,7 +318,7 @@ const OnboardingScreen = ({
     if (!normalizedEmail) {
       setFeedback({
         tone: 'error',
-        text: 'Escribí tu email para recuperar la contraseña.',
+        text: 'Escribí tu email para cambiar la contraseña.',
       });
       return;
     }
@@ -346,14 +346,14 @@ const OnboardingScreen = ({
     if (!response?.ok) {
       setFeedback({
         tone: 'error',
-        text: response?.message || 'No pudimos reenviar el email de verificación.',
+        text: response?.message || 'No pudimos reenviar el email.',
       });
       return;
     }
 
     setFeedback({
       tone: 'success',
-      text: 'Reenviamos el email de verificación. Revisá tu bandeja y spam.',
+      text: 'Reenviamos el email. Revisá tu bandeja y spam.',
     });
   };
 
@@ -406,7 +406,7 @@ const OnboardingScreen = ({
 
       <Text style={styles.accessTitle}>Elegí cómo querés entrar</Text>
       <Text style={styles.accessSubtitle}>
-        Podés seguir como invitado o dejar tu cuenta real lista desde ya.
+        Podés seguir como invitado o dejar tu cuenta lista desde ahora.
       </Text>
 
       <View style={styles.modeTabs}>
@@ -452,10 +452,9 @@ const OnboardingScreen = ({
 
       {isMemberPreview && email ? (
         <View style={styles.noticeCard}>
-          <Text style={styles.noticeTitle}>Cuenta creada, falta verificar</Text>
+          <Text style={styles.noticeTitle}>Revisá tu email para activar tu cuenta</Text>
           <Text style={styles.noticeText}>
-            Ya registraste {email}. Confirmá el email y después iniciá sesión para
-            terminar de entrar con tu cuenta real.
+            Ya registraste {email}. Confirmá el correo y después entrá con tu cuenta.
           </Text>
           <View style={styles.noticeActions}>
             <TouchableOpacity
@@ -463,7 +462,7 @@ const OnboardingScreen = ({
               onPress={handleResendVerification}
               disabled={isAuthBusy}>
               <Text style={styles.noticeActionPrimaryText}>
-                Reenviar verificación
+                Reenviar email
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -473,7 +472,7 @@ const OnboardingScreen = ({
                 resetFeedback();
               }}>
               <Text style={styles.noticeActionSecondaryText}>
-                Ya confirmé, iniciar sesión
+                Ya verifiqué mi email
               </Text>
             </TouchableOpacity>
           </View>
@@ -638,8 +637,7 @@ const OnboardingScreen = ({
       </View>
 
       <Text style={styles.accessFootnote}>
-        Podés entrar como invitado y conectar tu cuenta después desde el perfil, sin
-        perder el acceso a la app.
+        El modo invitado queda guardado solo en este dispositivo. Tu cuenta real se guarda aparte.
       </Text>
     </View>
   );

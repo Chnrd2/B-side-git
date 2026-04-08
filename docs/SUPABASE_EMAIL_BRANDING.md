@@ -1,23 +1,21 @@
-# Email de Auth en B-Side
+# Emails de Auth en B-Side
 
-Hoy B-Side ya puede registrar e iniciar sesión con Supabase, pero el email que llega
-todavía usa el remitente y la plantilla por defecto de Supabase.
+Hoy B-Side ya puede registrar e iniciar sesión con Supabase, pero los emails todavía usan el remitente y la plantilla por defecto.
 
-## Qué podés cambiar ya mismo
+## Qué podés dejar listo ahora
 
 En Supabase Dashboard:
 
 1. `Authentication > URL Configuration`
    - `Site URL`: la URL principal donde querés abrir B-Side.
-   - `Redirect URLs`: agregá tu web local, GitHub Pages y más adelante tu dominio real.
+   - `Redirect URLs`: agregá localhost, GitHub Pages y más adelante tu dominio real.
 2. `Authentication > Email Templates`
-   - Podés editar asunto y HTML de:
+   - Editá asunto y HTML de:
      - Confirm sign up
      - Magic link
      - Reset password
      - Change email
      - Invite user
-   - Ahí podés reemplazar el texto genérico por una versión de B-Side.
 
 Variables útiles de Supabase:
 
@@ -27,36 +25,34 @@ Variables útiles de Supabase:
 - `{{ .Data }}`
 - `{{ .Email }}`
 
-Con `{{ .Data }}` podés usar metadata del alta, por ejemplo el nombre visible o el
-handle que la persona eligió en el onboarding.
+Con `{{ .Data }}` podés usar metadata del registro, como nombre visible o handle.
 
-## Lo que no hace falta comprar ahora
+## Lo que no hace falta comprar todavía
 
-No necesitás comprar un dominio para que el registro funcione.
+No necesitás un dominio propio para que el registro funcione.
 
 Podés seguir usando:
 
-- la URL pública de Supabase para Auth
+- la URL pública de Supabase para auth
 - GitHub Pages o localhost como destino del flujo
 
 Eso alcanza para desarrollar, probar y mostrar la app.
 
-## Cuándo sí conviene comprar un dominio
+## Cuándo conviene sumar dominio + SMTP
 
-Te conviene comprar uno cuando quieras que el mail salga con una identidad prolija,
-por ejemplo:
+Cuando quieras que el mail salga con identidad de marca, por ejemplo:
 
 - `hola@bside.app`
 - `auth@bside.app`
 - `no-reply@bside.app`
 
-Para eso necesitás:
+Para eso vas a necesitar:
 
 1. un dominio propio
 2. un proveedor SMTP externo
 3. configurar DNS del dominio
 
-Proveedores comunes:
+Opciones comunes:
 
 - Resend
 - Postmark
@@ -64,34 +60,35 @@ Proveedores comunes:
 - Amazon SES
 - Brevo
 
-## Qué cambiar para que el mail se vea profesional
+## Recomendación para producción
 
 Según la documentación oficial de Supabase:
 
 - las plantillas se editan desde `Authentication > Email Templates`
-- el SMTP por defecto es solo de prueba y con límites muy bajos
-- para producción recomiendan usar `Custom SMTP`
+- el SMTP por defecto es solo para pruebas y tiene límites bajos
+- para producción recomiendan `Custom SMTP`
 
 Checklist recomendado para B-Side:
 
-1. Comprar dominio cuando definan el nombre final.
+1. Definir el dominio final.
 2. Crear `no-reply@tu-dominio`.
 3. Configurar `Custom SMTP` en Supabase.
-4. Editar asunto y HTML de confirmación, magic link y recuperación.
+4. Personalizar asunto y HTML de confirmación, magic link y recuperación.
 5. Ajustar `Site URL` y `Redirect URLs` al dominio final.
 
-## Ejemplo de asunto
+## Asuntos sugeridos
 
-- Confirmación: `Confirmá tu cuenta de B-Side`
+- Confirmación: `Activá tu cuenta de B-Side`
 - Magic link: `Entrá a B-Side`
 - Recuperación: `Cambiá tu contraseña de B-Side`
 
-## Ejemplo de tono
+## Tono recomendado
 
 - corto
 - claro
+- cercano
 - con marca
-- sin mencionar “powered by Supabase” en el cuerpo principal
+- sin hablar de infraestructura en el cuerpo principal
 
 ## Referencias oficiales
 

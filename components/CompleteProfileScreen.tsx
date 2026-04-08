@@ -16,10 +16,15 @@ import * as ImagePicker from 'expo-image-picker';
 import {
   Camera,
   CheckCircle2,
+  CircleAlert,
   ImagePlus,
+  LoaderCircle,
   LockKeyhole,
-  UserRound,
 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const MIN_HANDLE_LENGTH = 3;
+const HANDLE_CHECK_DELAY_MS = 350;
 
 const sanitizeHandle = (value = '') =>
   `${value}`
@@ -29,6 +34,8 @@ const sanitizeHandle = (value = '') =>
     .replace(/[^a-z0-9._]/g, '')
     .slice(0, 20);
 
+const buildStatusMessage = (tone, text) => ({ tone, text });
+
 const CompleteProfileScreen = ({
   currentUser,
   authMessage,
@@ -36,12 +43,17 @@ const CompleteProfileScreen = ({
   isEmailVerified,
   onSubmit,
   onSignOut,
+  onCheckHandle,
 }) => {
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState(currentUser?.name || '');
   const [handle, setHandle] = useState(currentUser?.handle || '');
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl || '');
-  const [feedback, setFeedback] = useState('');
+  const [formMessage, setFormMessage] = useState(null);
+  const [handleStatus, setHandleStatus] = useState(
+    buildStatusMessage('idle', 'Elegí un @ único para que la gente pueda encontrarte.')
+  );
 
   useEffect(() => {
     setName(currentUser?.name || '');
@@ -50,7 +62,98 @@ const CompleteProfileScreen = ({
     setAvatarUrl(currentUser?.avatarUrl || '');
   }, [currentUser]);
 
-  const helperText = useMemo(() => feedback || authMessage || '', [authMessage, feedback]);
+  const normalizedHandle = useMemo(() => sanitizeHandle(handle), [handle]);
+  const normalizedName = useMemo(() => name.trim(), [name]);
+  const profilePreviewName = normalizedName || currentUser?.name || 'Tu lado B';
+  const helperMessage = formMessage?.text || authMessage || '';
+  const completionProgress = useMemo(() => {
+    const checks = [
+      normalizedHandle.length >= MIN_HANDLE_LENGTH,
+      normalizedName.length > 0,
+    ];
+    return checks.filter(Boolean).length / checks.length;
+  }, [normalizedHandle.length, normalizedName.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!normalizedHandle) {
+      setHandleStatus(
+        buildStatusMessage('idle', 'Elegí un @ único para que la gente pueda encontrarte.')
+      );
+      return undefined;
+    }
+
+    if (normalizedHandle.length < MIN_HANDLE_LENGTH) {
+      setHandleStatus(
+        buildStatusMessage(
+          'error',
+          `Elegí un @ de al menos ${MIN_HANDLE_LENGTH} caracteres.`
+        )
+      );
+      return undefined;
+    }
+
+    if (
+      currentUser?.handle &&
+      normalizedHandle === sanitizeHandle(currentUser.handle) &&
+      currentUser?.profileCompletedAt
+    ) {
+      setHandleStatus(buildStatusMessage('success', 'Ese @ ya está listo para usar.'));
+      return undefined;
+    }
+
+    if (!onCheckHandle) {
+      setHandleStatus(
+        buildStatusMessage('info', 'Vamos a revisar tu @ al momento de guardar.')
+      );
+      return undefined;
+    }
+
+    setHandleStatus(buildStatusMessage('loading', 'Revisando si ese @ está disponible...'));
+
+    const timer = setTimeout(async () => {
+      const response = await onCheckHandle(normalizedHandle);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!response?.ok) {
+        setHandleStatus(
+          buildStatusMessage(
+            'error',
+            response?.message || 'No pudimos revisar ese @ ahora mismo.'
+          )
+        );
+        return;
+      }
+
+      if (!response.available) {
+        setHandleStatus(
+          buildStatusMessage(
+            'error',
+            response?.message || `@${normalizedHandle} ya está en uso.`
+          )
+        );
+        return;
+      }
+
+      setHandleStatus(
+        buildStatusMessage('success', `@${response.handle || normalizedHandle} está disponible.`)
+      );
+    }, HANDLE_CHECK_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    currentUser?.handle,
+    currentUser?.profileCompletedAt,
+    normalizedHandle,
+    onCheckHandle,
+  ]);
 
   const pickAvatar = async () => {
     try {
@@ -75,6 +178,9 @@ const CompleteProfileScreen = ({
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         setAvatarUrl(result.assets[0].uri);
+        setFormMessage(
+          buildStatusMessage('info', 'La foto se ve bien. Solo falta guardarla.')
+        );
       }
     } catch (error) {
       Alert.alert(
@@ -85,15 +191,31 @@ const CompleteProfileScreen = ({
   };
 
   const handleSubmit = async () => {
-    const normalizedHandle = sanitizeHandle(handle);
-    const normalizedName = name.trim();
-
-    if (normalizedHandle.length < 3) {
-      setFeedback('Elegí un @ de al menos 3 caracteres para completar el perfil.');
+    if (!normalizedName) {
+      setFormMessage(
+        buildStatusMessage('error', 'Escribí cómo querés aparecer en tu perfil.')
+      );
       return;
     }
 
-    setFeedback('');
+    if (normalizedHandle.length < MIN_HANDLE_LENGTH) {
+      setFormMessage(
+        buildStatusMessage(
+          'error',
+          `Elegí un @ de al menos ${MIN_HANDLE_LENGTH} caracteres para completar el perfil.`
+        )
+      );
+      return;
+    }
+
+    if (handleStatus?.tone === 'error') {
+      setFormMessage(
+        buildStatusMessage('error', handleStatus.text || 'Revisá tu @ antes de seguir.')
+      );
+      return;
+    }
+
+    setFormMessage(null);
 
     const result = await onSubmit?.({
       name: normalizedName || currentUser?.name || 'Tu lado B',
@@ -102,26 +224,95 @@ const CompleteProfileScreen = ({
       avatarUrl: avatarUrl.trim(),
     });
 
-    if (!result?.ok && !result?.skipped) {
-      setFeedback(result?.message || 'No pudimos guardar el perfil.');
+    if (result?.ok || result?.skipped) {
+      setFormMessage(
+        buildStatusMessage('success', 'Perfil listo. Ya podés entrar con todo en orden.')
+      );
+      return;
     }
+
+    setFormMessage(
+      buildStatusMessage(
+        'error',
+        result?.message || 'No pudimos guardar el perfil. Probá otra vez.'
+      )
+    );
+  };
+
+  const renderHandleStatus = () => {
+    if (!handleStatus?.text) {
+      return null;
+    }
+
+    const tone = handleStatus.tone || 'idle';
+    const iconColor =
+      tone === 'success'
+        ? '#4ADE80'
+        : tone === 'error'
+          ? '#FCA5A5'
+          : tone === 'loading'
+            ? '#C4B5FD'
+            : '#9CA3AF';
+
+    return (
+      <View style={styles.inlineStatusRow}>
+        {tone === 'loading' ? (
+          <LoaderCircle color={iconColor} size={14} />
+        ) : tone === 'success' ? (
+          <CheckCircle2 color={iconColor} size={14} />
+        ) : tone === 'error' ? (
+          <CircleAlert color={iconColor} size={14} />
+        ) : (
+          <ImagePlus color={iconColor} size={14} />
+        )}
+        <Text
+          style={[
+            styles.inlineStatusText,
+            tone === 'success' && styles.inlineStatusTextSuccess,
+            tone === 'error' && styles.inlineStatusTextError,
+          ]}
+        >
+          {handleStatus.text}
+        </Text>
+      </View>
+    );
   };
 
   return (
     <KeyboardAvoidingView
       style={styles.shell}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(insets.bottom + 28, 44) },
+        ]}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.eyebrow}>PASO 2 DE 2</Text>
+            <Text style={styles.progressLabel}>Último detalle antes de entrar</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${Math.max(16, Math.round(completionProgress * 100))}%` },
+              ]}
+            />
+          </View>
+        </View>
+
         <View style={styles.headerCard}>
-          <Text style={styles.eyebrow}>COMPLETAR PERFIL</Text>
-          <Text style={styles.title}>Dejá lista tu identidad en B-Side</Text>
+          <Text style={styles.title}>Dejá listo tu perfil</Text>
           <Text style={styles.subtitle}>
-            Antes de entrar a la app te pedimos un @ único. La foto y la bio son opcionales,
-            pero ya te dejan el perfil mucho más presentable.
+            Elegí cómo querés aparecer en B-Side. Con un @ único ya podés entrar; la foto y la bio
+            ayudan a que el perfil se sienta completo desde el primer día.
           </Text>
         </View>
 
@@ -132,17 +323,19 @@ const CompleteProfileScreen = ({
             ) : (
               <View style={styles.avatarFallback}>
                 <Text style={styles.avatarFallbackText}>
-                  {(name || currentUser?.name || 'B').charAt(0).toUpperCase()}
+                  {profilePreviewName.charAt(0).toUpperCase()}
                 </Text>
               </View>
             )}
           </View>
 
           <View style={styles.previewMeta}>
-            <Text style={styles.previewName}>{name || currentUser?.name || 'Tu lado B'}</Text>
-            <Text style={styles.previewHandle}>@{sanitizeHandle(handle) || 'tu_handle'}</Text>
+            <Text style={styles.previewName}>{profilePreviewName}</Text>
+            <Text style={styles.previewHandle}>@{normalizedHandle || 'tu_handle'}</Text>
             <Text style={styles.previewBio} numberOfLines={2}>
-              {bio || 'Todavía sin bio. Podés sumarla ahora o más tarde.'}
+              {bio.trim()
+                ? bio.trim()
+                : 'Todavía sin bio. Podés sumarla ahora o más tarde, sin romper el perfil.'}
             </Text>
           </View>
         </View>
@@ -153,9 +346,20 @@ const CompleteProfileScreen = ({
             <Text style={styles.mediaButtonText}>Elegir foto</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.mediaButton} onPress={() => setAvatarUrl('')}>
+          <TouchableOpacity
+            style={styles.mediaButton}
+            onPress={() => {
+              setAvatarUrl('');
+              setFormMessage(
+                buildStatusMessage(
+                  'info',
+                  'Podés seguir sin foto por ahora. Después la cambiás desde el perfil.'
+                )
+              );
+            }}
+          >
             <ImagePlus color="#A855F7" size={18} />
-            <Text style={styles.mediaButtonText}>Sin foto</Text>
+            <Text style={styles.mediaButtonText}>Usar inicial</Text>
           </TouchableOpacity>
         </View>
 
@@ -168,6 +372,7 @@ const CompleteProfileScreen = ({
             placeholder="Cómo querés aparecer"
             placeholderTextColor="#6B7280"
             autoCapitalize="words"
+            returnKeyType="next"
           />
 
           <Text style={styles.label}>@ de perfil</Text>
@@ -176,17 +381,18 @@ const CompleteProfileScreen = ({
             <TextInput
               style={styles.handleInput}
               value={handle}
-              onChangeText={(value) => setHandle(sanitizeHandle(value))}
+              onChangeText={(value) => {
+                setHandle(sanitizeHandle(value));
+                setFormMessage(null);
+              }}
               placeholder="tu_handle"
               placeholderTextColor="#6B7280"
               autoCapitalize="none"
               autoCorrect={false}
+              returnKeyType="next"
             />
           </View>
-          <Text style={styles.helper}>
-            El @ es obligatorio, público y tiene que ser único para que otras personas te
-            encuentren.
-          </Text>
+          {renderHandleStatus()}
 
           <Text style={styles.label}>Bio</Text>
           <TextInput
@@ -195,36 +401,59 @@ const CompleteProfileScreen = ({
             onChangeText={setBio}
             placeholder="Contá algo sobre tus gustos musicales..."
             placeholderTextColor="#6B7280"
-            multiline={true}
+            multiline
             textAlignVertical="top"
           />
 
-          {helperText ? <Text style={styles.feedback}>{helperText}</Text> : null}
+          {helperMessage ? (
+            <View
+              style={[
+                styles.feedbackCard,
+                formMessage?.tone === 'success' && styles.feedbackCardSuccess,
+                formMessage?.tone === 'error' && styles.feedbackCardError,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.feedbackText,
+                  formMessage?.tone === 'success' && styles.feedbackTextSuccess,
+                  formMessage?.tone === 'error' && styles.feedbackTextError,
+                ]}
+              >
+                {helperMessage}
+              </Text>
+            </View>
+          ) : null}
 
           <View style={styles.statusRow}>
             <CheckCircle2 color={isEmailVerified ? '#4ADE80' : '#FBBF24'} size={16} />
             <Text style={styles.statusText}>
               {isEmailVerified
-                ? 'Tu email ya figura como verificado.'
-                : 'La cuenta puede seguir, pero te conviene verificar el email cuanto antes.'}
+                ? 'Tu email ya está verificado.'
+                : 'La cuenta puede seguir, pero conviene verificar el email cuanto antes.'}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={[styles.primaryButton, isSaving && styles.buttonDisabled]}
+            style={[
+              styles.primaryButton,
+              (isSaving || handleStatus?.tone === 'loading') && styles.buttonDisabled,
+            ]}
             onPress={handleSubmit}
-            disabled={isSaving}>
+            disabled={isSaving || handleStatus?.tone === 'loading'}
+          >
             {isSaving ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.primaryButtonText}>Guardar y entrar</Text>
+              <Text style={styles.primaryButtonText}>Terminar perfil</Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.secondaryButton, isSaving && styles.buttonDisabled]}
             onPress={onSignOut}
-            disabled={isSaving}>
+            disabled={isSaving}
+          >
             <LockKeyhole color="#E9D5FF" size={16} />
             <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
           </TouchableOpacity>
@@ -245,9 +474,45 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 44,
+    paddingTop: 18,
     gap: 18,
+  },
+  progressCard: {
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.18)',
+    backgroundColor: 'rgba(10, 12, 24, 0.88)',
+    gap: 10,
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  eyebrow: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  progressLabel: {
+    color: '#D1D5DB',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#A855F7',
   },
   headerCard: {
     borderRadius: 26,
@@ -256,12 +521,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(168,85,247,0.24)',
     backgroundColor: 'rgba(8, 11, 22, 0.88)',
     gap: 8,
-  },
-  eyebrow: {
-    color: '#C4B5FD',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.1,
   },
   title: {
     color: 'white',
@@ -396,15 +655,49 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 14,
   },
-  helper: {
+  inlineStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineStatusText: {
+    flex: 1,
     color: '#9CA3AF',
     fontSize: 12,
     lineHeight: 18,
   },
-  feedback: {
+  inlineStatusTextSuccess: {
+    color: '#86EFAC',
+  },
+  inlineStatusTextError: {
+    color: '#FCA5A5',
+  },
+  feedbackCard: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(76, 29, 29, 0.48)',
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.2)',
+  },
+  feedbackCardSuccess: {
+    backgroundColor: 'rgba(20, 83, 45, 0.26)',
+    borderColor: 'rgba(74, 222, 128, 0.22)',
+  },
+  feedbackCardError: {
+    backgroundColor: 'rgba(76, 29, 29, 0.48)',
+    borderColor: 'rgba(248, 113, 113, 0.2)',
+  },
+  feedbackText: {
     color: '#FCA5A5',
     fontSize: 13,
     lineHeight: 19,
+  },
+  feedbackTextSuccess: {
+    color: '#BBF7D0',
+  },
+  feedbackTextError: {
+    color: '#FCA5A5',
   },
   statusRow: {
     flexDirection: 'row',

@@ -55,7 +55,12 @@ import {
   getSpotifyUserStatus,
   startSpotifyConnect,
 } from '../lib/spotifyUser';
-import { loadAppState, saveAppState } from '../lib/storage';
+import {
+  DEFAULT_SCOPE_KEY,
+  ENTRY_SCOPE_KEY,
+  loadAppState,
+  saveAppState,
+} from '../lib/storage';
 import {
   createBackendNotification,
   checkHandleAvailability,
@@ -105,6 +110,19 @@ import {
 } from '../lib/supabase';
 
 const initialState = createInitialState();
+const DEBUG_LOGS_ENABLED = typeof __DEV__ !== 'undefined' ? __DEV__ : false;
+
+const getPersistenceScope = ({ sessionMode = 'guest', userId = '' } = {}) => {
+  if (sessionMode === 'authenticated' && userId) {
+    return `user:${userId}`;
+  }
+
+  if (sessionMode === 'guest') {
+    return DEFAULT_SCOPE_KEY;
+  }
+
+  return ENTRY_SCOPE_KEY;
+};
 
 const mergeHandleCollections = (...collections) =>
   [...new Set(collections.flat().filter(Boolean).map((handle) => normalizeHandle(handle)))];
@@ -482,6 +500,7 @@ export default function useBSideApp() {
   const [isOracleBusy, setIsOracleBusy] = useState(false);
   const [oracleSource, setOracleSource] = useState('local');
   const [oracleMessage, setOracleMessage] = useState('');
+  const [latestAchievementUnlock, setLatestAchievementUnlock] = useState(null);
 
   const [currentTrack, setCurrentTrack] = useState(null);
   const playbackResolutionCacheRef = useRef(new Map());
@@ -496,6 +515,7 @@ export default function useBSideApp() {
   const reportsRef = useRef(initialState.reports);
   const authSubscriptionRef = useRef(null);
   const authRefreshSequenceRef = useRef(0);
+  const unlockedAchievementsRef = useRef([]);
   const [listModalAlbum, setListModalAlbum] = useState(null);
   const [isCreateListVisible, setIsCreateListVisible] = useState(false);
   const [isShareVisible, setIsShareVisible] = useState(false);
@@ -548,8 +568,24 @@ export default function useBSideApp() {
         };
   }, [currentUser.handle, currentUserHandle, reviews]);
 
+  const logProductDebug = (channel, scope, payload = {}) => {
+    if (!DEBUG_LOGS_ENABLED) {
+      return;
+    }
+
+    console.log(`[${channel}]`, scope, payload);
+  };
+
   const logAuthDebug = (scope, payload = {}) => {
-    console.log('[auth-sync]', scope, payload);
+    logProductDebug('auth-sync', scope, payload);
+  };
+
+  const logProfileDebug = (scope, payload = {}) => {
+    logProductDebug('profile-sync', scope, payload);
+  };
+
+  const logAchievementsDebug = (scope, payload = {}) => {
+    logProductDebug('achievement-sync', scope, payload);
   };
 
   const clearUserScopedState = () => {
@@ -562,6 +598,7 @@ export default function useBSideApp() {
     reportsRef.current = initialState.reports;
     playbackResolutionCacheRef.current.clear();
     oracleHistoryRef.current = [];
+    unlockedAchievementsRef.current = [];
     setCurrentUser(initialState.currentUser);
     setReviews(initialState.reviews);
     setWishlist(initialState.wishlist);
@@ -581,6 +618,7 @@ export default function useBSideApp() {
     setCurrentTrack(null);
     setOracleRecommendations([]);
     setOracleMessage('');
+    setLatestAchievementUnlock(null);
   };
 
   const resetToAuthEntry = ({
@@ -789,18 +827,23 @@ export default function useBSideApp() {
   const achievementSummary = useMemo(
     () =>
       buildAchievementSummary({
+        userHandle: currentUser.handle,
+        profileCompleted: hasCompletedPublicProfile(currentUser),
         reviewCount: ownReviews.length,
         listCount: lists.filter((list) => !list.isSystem).length,
         streakCurrent: listeningStreak.current,
         listeningDays: listeningHistory.length,
         recommendationsSent: recommendationsSentCount,
+        topAlbumsPinned: top5.length,
       }),
     [
+      currentUser.handle,
       listeningHistory.length,
       listeningStreak.current,
       lists,
       ownReviews.length,
       recommendationsSentCount,
+      top5.length,
     ]
   );
   const wishlistList = useMemo(
@@ -811,12 +854,60 @@ export default function useBSideApp() {
       isPublic: false,
       isSystem: true,
       systemDescription:
-        'Tu cola privada para discos que quieres escuchar con mas tiempo.',
+        'Tu lista privada para esos discos que querés escuchar con más tiempo.',
       items: wishlist,
       count: wishlist.length,
     }),
     [wishlist]
   );
+
+  useEffect(() => {
+    if (!hasHydrated || !achievementSummary) {
+      return undefined;
+    }
+
+    const previousUnlockedIds = new Set(unlockedAchievementsRef.current);
+    const nextUnlockedIds = achievementSummary.unlockedAchievements.map(
+      (achievement) => achievement.id
+    );
+
+    if (!unlockedAchievementsRef.current.length) {
+      unlockedAchievementsRef.current = nextUnlockedIds;
+      return undefined;
+    }
+
+    const newlyUnlocked = achievementSummary.unlockedAchievements.filter(
+      (achievement) => !previousUnlockedIds.has(achievement.id)
+    );
+
+    unlockedAchievementsRef.current = nextUnlockedIds;
+
+    if (!newlyUnlocked.length) {
+      return undefined;
+    }
+
+    const newestUnlock = newlyUnlocked[newlyUnlocked.length - 1];
+    logAchievementsDebug('achievement_unlocked', {
+      achievementId: newestUnlock.id,
+      title: newestUnlock.title,
+    });
+    setLatestAchievementUnlock(newestUnlock);
+    void triggerSuccessFeedback();
+    pushNotification({
+      type: 'product',
+      title: 'Nuevo logro desbloqueado',
+      body: `${newestUnlock.title} ya quedó activo en tu perfil.`,
+      read: true,
+    });
+
+    const timer = setTimeout(() => {
+      setLatestAchievementUnlock((currentUnlock) =>
+        currentUnlock?.id === newestUnlock.id ? null : currentUnlock
+      );
+    }, 4800);
+
+    return () => clearTimeout(timer);
+  }, [achievementSummary, hasHydrated]);
   const ownTasteAlbumKeys = useMemo(() => {
     const albums = [
       ...top5.map((album) => createAlbumKey(album.title, album.artist)),
@@ -1549,10 +1640,30 @@ export default function useBSideApp() {
     let isMounted = true;
 
     const hydrate = async () => {
-      const persistedState = await loadAppState();
+      const guestPersistedState = await loadAppState({
+        scope: DEFAULT_SCOPE_KEY,
+      });
+      const entryPersistedState = await loadAppState({
+        scope: ENTRY_SCOPE_KEY,
+      });
+
+      let persistedState =
+        entryPersistedState?.__meta?.hasStoredSnapshot &&
+        ['member_preview', 'signed_out'].includes(
+          entryPersistedState.preferences?.sessionMode
+        )
+          ? entryPersistedState
+          : guestPersistedState?.__meta?.hasStoredSnapshot
+            ? guestPersistedState
+            : entryPersistedState;
 
       if (!isMounted) return;
-      setHasStoredSnapshot(Boolean(persistedState?.__meta?.hasStoredSnapshot));
+      setHasStoredSnapshot(
+        Boolean(
+          guestPersistedState?.__meta?.hasStoredSnapshot ||
+            entryPersistedState?.__meta?.hasStoredSnapshot
+        )
+      );
 
       let nextPreferences = {
         ...initialState.preferences,
@@ -1584,6 +1695,44 @@ export default function useBSideApp() {
           setAuthSession(snapshot.session || null);
 
           if (snapshot.session?.user) {
+            const persistedUserState = await loadAppState({
+              scope: getPersistenceScope({
+                sessionMode: 'authenticated',
+                userId: snapshot.session.user.id,
+              }),
+            });
+
+            setHasStoredSnapshot((prevValue) =>
+              prevValue || Boolean(persistedUserState?.__meta?.hasStoredSnapshot)
+            );
+
+            persistedState = persistedUserState?.__meta?.hasStoredSnapshot
+              ? persistedUserState
+              : createInitialState();
+
+            nextPreferences = {
+              ...initialState.preferences,
+              ...(persistedUserState?.preferences || {}),
+            };
+            nextCurrentUser = {
+              ...(persistedUserState?.currentUser || initialState.currentUser),
+              top5: persistedUserState?.top5 || initialState.top5,
+            };
+            nextFollowingHandles =
+              persistedUserState?.followingHandles || initialState.followingHandles;
+            nextBlockedHandles =
+              persistedUserState?.blockedHandles || initialState.blockedHandles;
+            nextReports = persistedUserState?.reports || initialState.reports;
+            nextReviews = persistedUserState?.reviews || initialState.reviews;
+            nextLists = persistedUserState?.lists || initialState.lists;
+            nextWishlist = persistedUserState?.wishlist || initialState.wishlist;
+            nextListeningHistory =
+              persistedUserState?.listeningHistory || initialState.listeningHistory;
+            nextGlobalChats = persistedUserState?.chats || initialState.chats;
+            nextNotifications =
+              persistedUserState?.notifications || initialState.notifications;
+            nextTop5 = persistedUserState?.top5 || initialState.top5;
+
             const userChanged =
               persistedState.currentUser?.id &&
               persistedState.currentUser.id !== snapshot.session.user.id;
@@ -1638,11 +1787,11 @@ export default function useBSideApp() {
             }
           }
 
-          if (snapshot.warning) {
-            setAuthMessage(snapshot.warning);
+            if (snapshot.warning) {
+              setAuthMessage(snapshot.warning);
+            }
           }
         }
-      }
 
       setCurrentUser(nextCurrentUser);
       setReviews(nextReviews);
@@ -1687,6 +1836,11 @@ export default function useBSideApp() {
     if (!hasHydrated) return;
 
     const timer = setTimeout(() => {
+      const persistenceScope = getPersistenceScope({
+        sessionMode: preferences.sessionMode,
+        userId: authSession?.user?.id || '',
+      });
+
       saveAppState({
         currentUser,
         reviews,
@@ -1700,6 +1854,8 @@ export default function useBSideApp() {
         blockedHandles,
         reports,
         preferences,
+      }, {
+        scope: persistenceScope,
       }).catch((error) => {
         console.error('No pudimos guardar el estado local:', error);
       });
@@ -3386,8 +3542,8 @@ export default function useBSideApp() {
       title: 'B-Side listo para explorar',
       body:
         sessionMode === 'member_preview'
-          ? 'Entraste con una cuenta pendiente de confirmación.'
-          : 'Entraste como invitado.',
+          ? 'Tu cuenta ya está creada. Solo falta confirmar el email.'
+          : 'Entraste como invitado. Todo queda guardado solo en este dispositivo.',
       read: true,
     });
   };
@@ -3691,10 +3847,10 @@ export default function useBSideApp() {
 
     pushNotification({
       type: 'security',
-      title: 'Cuenta demo actualizada',
+      title: 'Acceso listo',
       body: normalizedEmail
-        ? `Guardaste ${normalizedEmail} como acceso principal de prueba.`
-        : 'La cuenta demo sigue en modo invitado.',
+        ? `${normalizedEmail} quedó como email principal para entrar después.`
+        : 'Seguís usando la app en modo invitado.',
     });
   };
 
@@ -3729,10 +3885,10 @@ export default function useBSideApp() {
 
     if (!handleCheck.ok || !handleCheck.available) {
       setIsAuthBusy(false);
-      setAuthMessage(handleCheck.message || 'No pudimos usar ese @.');
+      setAuthMessage(handleCheck.message || 'Ese @ no está disponible.');
       return {
         ok: false,
-        message: handleCheck.message || 'No pudimos usar ese @.',
+        message: handleCheck.message || 'Ese @ no está disponible.',
       };
     }
 
@@ -3809,16 +3965,16 @@ export default function useBSideApp() {
 
     pushNotification({
       type: 'security',
-      title: 'Registro iniciado',
-      body: 'Tu cuenta real quedó creada. Revisá el email si hace falta confirmarla.',
+      title: 'Cuenta creada',
+      body: 'Tu cuenta real ya quedó lista. Revisá tu email para activarla si hace falta.',
       read: true,
     });
 
     setIsAuthBusy(false);
     setAuthMessage(
       response.data?.session?.user
-        ? 'Cuenta real conectada.'
-        : 'Cuenta creada. Falta confirmar el email.'
+        ? 'Tu cuenta ya quedó conectada.'
+        : 'Revisá tu email para activar tu cuenta.'
     );
 
     return response;
@@ -3877,10 +4033,10 @@ export default function useBSideApp() {
       pushNotification({
         type: 'security',
         title: 'Sesión iniciada',
-        body: 'Tu cuenta real ya quedó activa en B-Side.',
+        body: 'Tu cuenta ya quedó activa en B-Side.',
         read: true,
       });
-      setAuthMessage('Sesión iniciada.');
+      setAuthMessage('Ya entraste con tu cuenta.');
     }
 
     setIsAuthBusy(false);
@@ -3910,11 +4066,11 @@ export default function useBSideApp() {
       }));
       pushNotification({
         type: 'security',
-        title: 'Acceso por email enviado',
+        title: 'Email enviado',
         body: 'Revisá tu email para continuar.',
         read: true,
       });
-      setAuthMessage('Acceso por email enviado.');
+      setAuthMessage('Te mandamos un email para entrar.');
     } else {
       setAuthMessage(response.message);
     }
@@ -3933,7 +4089,7 @@ export default function useBSideApp() {
     const response = await sendPasswordReset(normalizedEmail);
 
     if (response.ok) {
-      setAuthMessage('Te enviamos un email para cambiar la contraseña.');
+      setAuthMessage('Te mandamos un email para cambiar la contraseña.');
     } else {
       setAuthMessage(response.message);
     }
@@ -3989,10 +4145,33 @@ export default function useBSideApp() {
     setIsAuthBusy(false);
 
     if (response.ok) {
-      setAuthMessage('Reenviamos el email de verificación.');
+      setAuthMessage('Revisá tu email para activar tu cuenta.');
     } else if (response.message) {
       setAuthMessage(response.message);
     }
+
+    return response;
+  };
+
+  const checkProfileHandleAvailability = async (handle) => {
+    const activeSession = authSessionRef.current;
+    const normalizedHandle = sanitizeProfileHandle(handle);
+
+    logProfileDebug('check_handle:start', {
+      handle: normalizedHandle,
+      userId: activeSession?.user?.id || currentUserRef.current?.id || '',
+    });
+
+    const response = await checkHandleAvailability(
+      normalizedHandle,
+      activeSession?.user?.id || currentUserRef.current?.id || ''
+    );
+
+    logProfileDebug('check_handle:done', {
+      handle: normalizedHandle,
+      ok: response?.ok,
+      available: response?.available,
+    });
 
     return response;
   };
@@ -4010,7 +4189,7 @@ export default function useBSideApp() {
     setIsAuthBusy(false);
 
     if (response.ok) {
-      setAuthMessage('Cerramos las otras sesiones abiertas de esta cuenta.');
+      setAuthMessage('Las otras sesiones ya quedaron cerradas.');
     } else if (response.message) {
       setAuthMessage(response.message);
     }
@@ -4044,7 +4223,7 @@ export default function useBSideApp() {
     resetToAuthEntry({
       entry: 'intro',
       keepOnboardingCompleted: false,
-      message: 'La cuenta se borró y este dispositivo volvió al inicio.',
+      message: 'Tu cuenta se borró y este dispositivo volvió al inicio.',
     });
 
     return response;
@@ -4830,7 +5009,7 @@ export default function useBSideApp() {
     if (!handleCheck.ok || !handleCheck.available) {
       return {
         ok: false,
-        message: handleCheck.message || 'No pudimos guardar ese @.',
+        message: handleCheck.message || 'Ese @ no está disponible.',
       };
     }
 
@@ -4857,6 +5036,11 @@ export default function useBSideApp() {
     };
 
     setIsProfileSaving(true);
+    logProfileDebug('save_profile:start', {
+      userId: activeSession?.user?.id || currentUser.id,
+      handle: localDraft.handle,
+      isAuthenticated: Boolean(activeSession?.user),
+    });
     currentUserRef.current = localDraft;
     setCurrentUser(localDraft);
 
@@ -4870,7 +5054,7 @@ export default function useBSideApp() {
           setAuthMessage(backendResult.message);
           pushNotification({
             type: 'security',
-            title: 'Perfil guardado solo en local',
+            title: 'Guardado solo en este dispositivo',
             body: backendResult.message,
             read: true,
           });
@@ -4888,8 +5072,8 @@ export default function useBSideApp() {
         type: 'product',
         title: 'Perfil actualizado',
         body: activeSession?.user
-          ? 'Foto, fondo y datos del perfil quedaron sincronizados.'
-          : 'Foto, fondo y datos del perfil quedaron guardados.',
+          ? 'Tus cambios ya quedaron sincronizados.'
+          : 'Tus cambios quedaron guardados en este dispositivo.',
         read: true,
       });
 
@@ -4921,7 +5105,10 @@ export default function useBSideApp() {
         ...prevPreferences,
         profileSetupRequired: false,
       }));
-      setAuthMessage('Tu perfil quedó listo para entrar a la app.');
+      logProfileDebug('complete_profile:success', {
+        handle: resolvedUser.handle,
+      });
+      setAuthMessage('Tu perfil ya está listo. Ahora sí, a explorar.');
     }
 
     return result;
@@ -5175,6 +5362,7 @@ export default function useBSideApp() {
     oracleMessage,
     musicOracleStatus,
     achievementSummary,
+    latestAchievementUnlock,
     lists,
     top5,
     globalChats,
@@ -5240,6 +5428,7 @@ export default function useBSideApp() {
     signOutBackendAccount,
     signOutOtherBackendSessions,
     resendVerificationEmail,
+    checkProfileHandleAvailability,
     deleteBackendAccount,
     refreshAuthenticatedUser,
     connectSpotifyAccount,

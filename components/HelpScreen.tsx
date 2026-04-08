@@ -16,12 +16,12 @@ const FAQ_ITEMS = [
   {
     id: 'account',
     title: '¿Cómo recupero mi cuenta?',
-    text: 'Desde Cuenta y sesión podés pedir un email para cambiar la contraseña o volver a entrar con magic link.',
+    text: 'Desde Cuenta y sesión podés pedir un email para cambiar la contraseña o volver a entrar con un enlace.',
   },
   {
     id: 'spotify',
     title: '¿Qué pasa si un disco no se reproduce?',
-    text: 'B-Side usa previews cuando están disponibles. Si un lanzamiento no trae audio directo, la ficha te ofrece abrirlo en Spotify o en su release original.',
+    text: 'B-Side usa muestras cuando están disponibles. Si un lanzamiento no trae audio directo, la ficha te ofrece abrirlo en Spotify o en el lanzamiento original.',
   },
   {
     id: 'privacy',
@@ -56,10 +56,9 @@ const HelpScreen = ({ onBack }) => {
           </View>
           <View style={styles.heroCopy}>
             <Text style={styles.eyebrow}>SOPORTE</Text>
-            <Text style={styles.title}>Todo lo clave para destrabarte rápido</Text>
+            <Text style={styles.title}>Todo lo necesario para destrabarte rápido</Text>
             <Text style={styles.subtitle}>
-              Dejamos una base simple y clara para que la app se pueda usar sin perder
-              tiempo en menús raros.
+              Te dejamos una base simple y clara para que no pierdas tiempo buscando dónde está cada cosa.
             </Text>
           </View>
         </View>

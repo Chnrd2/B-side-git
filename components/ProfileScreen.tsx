@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated } from 'react-native';
 import {
   Ban,
   Crown,
@@ -75,6 +77,7 @@ const ProfileScreen = ({
   listeningStreak,
   recentListening = [],
   achievementSummary,
+  latestAchievementUnlock,
   onOpenReviewWhileListening,
   interestingUsers = [],
   profileCompatibility,
@@ -84,6 +87,7 @@ const ProfileScreen = ({
   const [isSettingsVisible, setIsSettingsVisible] = useState(false);
   const [isEditProfileVisible, setIsEditProfileVisible] = useState(false);
   const [isStreakInfoVisible, setIsStreakInfoVisible] = useState(false);
+  const achievementBannerOpacity = useRef(new Animated.Value(0)).current;
 
   const profileHandle = `@${user?.handle}`;
   const profileTheme = buildProfileTheme(user);
@@ -107,6 +111,14 @@ const ProfileScreen = ({
   const suggestedUsers = interestingUsers
     .filter((candidate) => `@${candidate?.handle}` !== profileHandle)
     .slice(0, 4);
+
+  useEffect(() => {
+    Animated.timing(achievementBannerOpacity, {
+      toValue: latestAchievementUnlock ? 1 : 0,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [achievementBannerOpacity, latestAchievementUnlock]);
 
   const submitProfileReport = (reason) => {
     const result = onReportUser?.({
@@ -336,25 +348,41 @@ const ProfileScreen = ({
   const renderAchievementsSection = () => {
     if (isPublic || !achievementSummary) return null;
 
-    const unlockedBadges = achievementSummary.unlockedBadges || [];
-    const nextBadge = achievementSummary.nextBadge;
+    const unlockedBadges = achievementSummary.unlockedAchievements || [];
+    const nextBadge = achievementSummary.nextAchievement;
 
     return (
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Tu progreso</Text>
+        <Text style={styles.sectionTitle}>Logros</Text>
 
         <View style={styles.achievementCard}>
+          {latestAchievementUnlock ? (
+            <Animated.View
+              style={[
+                styles.achievementUnlockBanner,
+                { opacity: achievementBannerOpacity },
+              ]}>
+              <Sparkles color="#FDE68A" size={16} />
+              <View style={styles.achievementUnlockCopy}>
+                <Text style={styles.achievementUnlockEyebrow}>NUEVO LOGRO</Text>
+                <Text style={styles.achievementUnlockTitle}>
+                  {latestAchievementUnlock.title}
+                </Text>
+              </View>
+            </Animated.View>
+          ) : null}
+
           <View style={styles.achievementHeader}>
             <View style={styles.achievementCopy}>
-              <Text style={styles.achievementEyebrow}>MEDALLAS Y DESBLOQUEOS</Text>
+              <Text style={styles.achievementEyebrow}>LOGROS Y DESBLOQUEOS</Text>
               <Text style={styles.achievementTitle}>
                 {unlockedBadges.length
-                  ? `${unlockedBadges.length} insignias activas`
-                  : 'Todavía no desbloqueaste insignias'}
+                  ? `${achievementSummary.unlockedCount}/${achievementSummary.totalCount} desbloqueados`
+                  : 'Todavía no desbloqueaste logros'}
               </Text>
               <Text style={styles.achievementText}>
                 {achievementSummary.avatarFrame?.id === 'default'
-                  ? 'Tu perfil ya suma progreso. Cuando avances, también vas a desbloquear marcos para el avatar.'
+                  ? 'Cada reseña, escucha y mejora de perfil suma progreso y destraba nuevos detalles.'
                   : `Ya destrabaste el marco ${achievementSummary.avatarFrame.label.toLowerCase()} para tu avatar.`}
               </Text>
             </View>
@@ -364,6 +392,30 @@ const ProfileScreen = ({
                 {achievementSummary.avatarFrame?.label || 'Clásico'}
               </Text>
             </View>
+          </View>
+
+          <View style={styles.achievementSummaryRow}>
+            <Text style={styles.achievementSummaryLabel}>Progreso general</Text>
+            <Text style={styles.achievementSummaryValue}>
+              {achievementSummary.progressLabel}
+            </Text>
+          </View>
+
+          <View style={styles.progressBarTrack}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width:
+                    achievementSummary.progress > 0
+                      ? `${Math.max(
+                          10,
+                          Math.round(achievementSummary.progress * 100)
+                        )}%`
+                      : '0%',
+                },
+              ]}
+            />
           </View>
 
           {unlockedBadges.length ? (
@@ -383,7 +435,7 @@ const ProfileScreen = ({
                       {badge.title}
                     </Text>
                     <Text style={styles.achievementBadgeDescription} numberOfLines={2}>
-                      {badge.description}
+                      {badge.condition || badge.description}
                     </Text>
                   </View>
                 );
@@ -392,8 +444,7 @@ const ProfileScreen = ({
           ) : (
             <View style={styles.achievementEmptyState}>
               <Text style={styles.achievementEmptyText}>
-                Cada reseña, lista o recomendación suma para tus próximos
-                desbloqueos.
+                Tu primera reseña, tus escuchas y un perfil completo ya alcanzan para destrabar los primeros logros.
               </Text>
             </View>
           )}
@@ -430,7 +481,7 @@ const ProfileScreen = ({
             <View style={styles.completedBadgeCard}>
               <Sparkles color="#FDE68A" size={16} />
               <Text style={styles.completedBadgeText}>
-                Ya desbloqueaste todas las insignias de esta etapa.
+                Ya desbloqueaste todos los logros de esta etapa.
               </Text>
             </View>
           )}
@@ -900,6 +951,32 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 14,
   },
+  achievementUnlockBanner: {
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(250,204,21,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.18)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  achievementUnlockCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  achievementUnlockEyebrow: {
+    color: '#FDE68A',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  achievementUnlockTitle: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '900',
+  },
   achievementHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -924,6 +1001,22 @@ const styles = StyleSheet.create({
   achievementText: {
     color: '#D1D5DB',
     lineHeight: 19,
+  },
+  achievementSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  achievementSummaryLabel: {
+    color: '#9CA3AF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  achievementSummaryValue: {
+    color: '#E9D5FF',
+    fontSize: 12,
+    fontWeight: '800',
   },
   avatarFrameChip: {
     borderRadius: 999,

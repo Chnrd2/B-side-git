@@ -303,8 +303,8 @@ const AuthPreviewScreen = ({
             {authSession?.user
               ? isEmailVerified
                 ? 'cuenta verificada'
-                : 'cuenta pendiente de verificar'
-              : 'sin sesión real activa'}
+                : 'email pendiente de verificación'
+              : 'sin cuenta conectada'}
           </Text>
           <Text style={styles.statusText}>
             Modo actual:{' '}

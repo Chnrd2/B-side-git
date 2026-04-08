@@ -65,7 +65,7 @@ const AccountScreen = ({
     if (!email) {
       Alert.alert(
         'Falta un email',
-        'Primero necesitás guardar o conectar una cuenta con email.'
+        'Primero necesitás conectar una cuenta con email.'
       );
       return;
     }
@@ -91,8 +91,8 @@ const AccountScreen = ({
 
     if (response?.ok) {
       Alert.alert(
-        'Cuenta sincronizada',
-        'Actualizamos el estado real de tu cuenta y tu sesión.'
+        'Cuenta actualizada',
+        'Refrescamos el estado de tu cuenta y tu sesión.'
       );
       return;
     }
@@ -175,7 +175,7 @@ const AccountScreen = ({
   const handleSignOut = () => {
     Alert.alert(
       'Cerrar sesión',
-      '¿Querés desconectar tu cuenta real de este dispositivo?',
+      '¿Querés cerrar tu cuenta en este dispositivo?',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -187,7 +187,7 @@ const AccountScreen = ({
             if (response?.ok) {
               Alert.alert(
                 'Sesión cerrada',
-                'Tu cuenta real se desconectó de este dispositivo.'
+                'Tu cuenta se cerró en este dispositivo.'
               );
               return;
             }
@@ -219,17 +219,17 @@ const AccountScreen = ({
           <Text style={styles.eyebrow}>CUENTA Y SESIÓN</Text>
           <Text style={styles.title}>
             {isAuthenticated
-              ? 'Tu cuenta real ya está conectada'
+              ? 'Tu cuenta ya está conectada'
               : isPreview
-                ? 'Tu cuenta quedó a mitad de camino'
+                ? 'Tu cuenta quedó pendiente'
                 : 'Todavía estás en modo invitado'}
           </Text>
           <Text style={styles.subtitle}>
             {isAuthenticated
-              ? 'Desde acá podés revisar acceso, verificación, sesiones y ayuda sin perder de vista lo importante.'
+              ? 'Desde acá podés revisar acceso, verificación, sesiones y ayuda.'
               : isPreview
-                ? 'Terminá de verificar el email y dejá el perfil listo para guardar todo con tu identidad.'
-                : 'Si querés guardar progreso de verdad, este es el lugar para crear o conectar una cuenta.'}
+                ? 'Terminá de verificar el email y dejá tu perfil listo.'
+                : 'Si querés guardar tu progreso de verdad, este es el lugar para crear o conectar una cuenta.'}
           </Text>
         </View>
 

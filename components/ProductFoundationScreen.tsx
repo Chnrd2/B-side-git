@@ -166,7 +166,7 @@ const ProductFoundationScreen = ({
             {preferences.profileModerationEnabled ? 'activa' : 'pendiente'}
           </Text>
           <Text style={styles.snapshotText}>
-            Insignias activas: {achievementSummary?.unlockedBadges?.length || 0}
+            Logros desbloqueados: {achievementSummary?.unlockedCount || 0}
           </Text>
           <Text style={styles.snapshotText}>
             Notificaciones guardadas: {notifications.length}

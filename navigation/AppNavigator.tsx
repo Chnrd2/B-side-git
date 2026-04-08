@@ -142,6 +142,7 @@ function MainTabs({ app }) {
             listeningStreak={app.listeningStreak}
             recentListening={app.recentListening}
             achievementSummary={app.achievementSummary}
+            latestAchievementUnlock={app.latestAchievementUnlock}
             onOpenReviewWhileListening={app.openReviewWhileListening}
             interestingUsers={app.interestingUsers}
             onViewSuggestedProfile={(userHandle) => {

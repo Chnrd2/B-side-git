@@ -49,7 +49,7 @@ const SessionsScreen = ({
   const confirmCloseOthers = () => {
     Alert.alert(
       'Cerrar otras sesiones',
-      'Vamos a desconectar esta cuenta de los demás dispositivos y navegadores, manteniendo abierta solo esta sesión.',
+      'Vamos a cerrar esta cuenta en los demás dispositivos y navegadores, dejando abierta solo esta sesión.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -122,8 +122,7 @@ const SessionsScreen = ({
           <View style={styles.infoCallout}>
             <ShieldCheck color="#A855F7" size={16} />
             <Text style={styles.infoText}>
-              Supabase permite cerrar las otras sesiones abiertas sin desconectar este
-              dispositivo.
+              Podés cerrar el resto de las sesiones sin desconectar este dispositivo.
             </Text>
           </View>
 

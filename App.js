@@ -1,8 +1,9 @@
 import 'react-native-gesture-handler';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Animated,
   LogBox,
   StatusBar,
@@ -32,6 +33,7 @@ LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
 export default function App() {
   const app = useBSideApp();
+  const appStateRef = useRef(AppState.currentState);
 
   const shouldShowAuthEntry =
     !app.preferences.hasCompletedOnboarding ||
@@ -40,6 +42,21 @@ export default function App() {
       !app.authSession?.user);
   const shouldShowProfileSetup = app.isAuthenticated && app.needsProfileCompletion;
   const shouldShowVerificationBanner = app.isAuthenticated && !app.isEmailVerified;
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const wasBackground =
+        appStateRef.current === 'background' || appStateRef.current === 'inactive';
+
+      appStateRef.current = nextState;
+
+      if (wasBackground && nextState === 'active' && shouldShowVerificationBanner) {
+        void app.refreshAuthenticatedUser();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [app.refreshAuthenticatedUser, shouldShowVerificationBanner]);
 
   if (app.isLoading) {
     return (
@@ -114,6 +131,7 @@ export default function App() {
             isEmailVerified={app.isEmailVerified}
             onSubmit={app.completeProfileSetup}
             onSignOut={app.signOutBackendAccount}
+            onCheckHandle={app.checkProfileHandleAvailability}
           />
         </View>
       </SafeAreaProvider>
