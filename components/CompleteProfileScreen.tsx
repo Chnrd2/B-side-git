@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +23,7 @@ import {
   LockKeyhole,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { triggerSuccessFeedback } from '../lib/feedback';
 
 const MIN_HANDLE_LENGTH = 3;
 const HANDLE_CHECK_DELAY_MS = 350;
@@ -51,6 +53,7 @@ const CompleteProfileScreen = ({
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl || '');
   const [formMessage, setFormMessage] = useState(null);
+  const previewScale = useRef(new Animated.Value(1)).current;
   const [handleStatus, setHandleStatus] = useState(
     buildStatusMessage('idle', 'Elegí un @ único para que la gente pueda encontrarte.')
   );
@@ -61,6 +64,28 @@ const CompleteProfileScreen = ({
     setBio(currentUser?.bio || '');
     setAvatarUrl(currentUser?.avatarUrl || '');
   }, [currentUser]);
+
+  useEffect(() => {
+    if (formMessage?.tone !== 'success') {
+      return undefined;
+    }
+
+    void triggerSuccessFeedback();
+    const animation = Animated.sequence([
+      Animated.timing(previewScale, {
+        toValue: 1.02,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.spring(previewScale, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+    ]);
+
+    animation.start();
+    return () => animation.stop();
+  }, [formMessage?.tone, previewScale]);
 
   const normalizedHandle = useMemo(() => sanitizeHandle(handle), [handle]);
   const normalizedName = useMemo(() => name.trim(), [name]);
@@ -316,7 +341,7 @@ const CompleteProfileScreen = ({
           </Text>
         </View>
 
-        <View style={styles.previewCard}>
+        <Animated.View style={[styles.previewCard, { transform: [{ scale: previewScale }] }]}>
           <View style={styles.avatarWrap}>
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
@@ -338,7 +363,7 @@ const CompleteProfileScreen = ({
                 : 'Todavía sin bio. Podés sumarla ahora o más tarde, sin romper el perfil.'}
             </Text>
           </View>
-        </View>
+        </Animated.View>
 
         <View style={styles.actionsRow}>
           <TouchableOpacity style={styles.mediaButton} onPress={pickAvatar}>
@@ -455,7 +480,7 @@ const CompleteProfileScreen = ({
             disabled={isSaving}
           >
             <LockKeyhole color="#E9D5FF" size={16} />
-            <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
+          <Text style={styles.secondaryButtonText}>Cerrar sesión</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -744,3 +769,5 @@ const styles = StyleSheet.create({
 });
 
 export default CompleteProfileScreen;
+
+

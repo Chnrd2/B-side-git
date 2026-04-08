@@ -46,6 +46,11 @@ function MainTabs({ app }) {
             currentUserHandle={`@${app.currentUser.handle}`}
             currentTrack={app.currentTrack}
             friendActivity={app.friendActivity}
+            listeningStreak={app.listeningStreak}
+            recentListening={app.recentListening}
+            achievementSummary={app.achievementSummary}
+            latestAchievementUnlock={app.latestAchievementUnlock}
+            interestingAlbums={app.interestingAlbums}
             hasUnreadMessages={app.hasUnreadMessages}
             hasUnreadNotifications={app.hasUnreadNotifications}
             onDeleteReview={app.deleteReview}
@@ -62,6 +67,7 @@ function MainTabs({ app }) {
             onAddReviewComment={app.addReviewComment}
             onOpenInbox={() => navigation.getParent()?.navigate('Inbox')}
             onOpenReviewWhileListening={app.openReviewWhileListening}
+            onPlaySong={app.playTrack}
             onSelectAlbum={(album) =>
               navigation.getParent()?.navigate('AlbumDetail', { album })
             }

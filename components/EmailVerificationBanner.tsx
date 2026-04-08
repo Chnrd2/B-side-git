@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   AppState,
@@ -350,3 +350,4 @@ const styles = StyleSheet.create({
 });
 
 export default EmailVerificationBanner;
+

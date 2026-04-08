@@ -394,6 +394,25 @@ const ProfileScreen = ({
             </View>
           </View>
 
+          <View style={styles.levelSummaryCard}>
+            <View style={styles.levelSummaryCopy}>
+              <Text style={styles.levelSummaryEyebrow}>NIVEL ACTUAL</Text>
+              <Text style={styles.levelSummaryTitle}>
+                Nivel {achievementSummary.level} · {achievementSummary.levelTitle}
+              </Text>
+              <Text style={styles.levelSummaryText}>
+                {achievementSummary.momentumCopy}
+              </Text>
+            </View>
+
+            <View style={styles.levelSummaryBadge}>
+              <Text style={styles.levelSummaryBadgeValue}>
+                {achievementSummary.totalPoints}
+              </Text>
+              <Text style={styles.levelSummaryBadgeLabel}>pts</Text>
+            </View>
+          </View>
+
           <View style={styles.achievementSummaryRow}>
             <Text style={styles.achievementSummaryLabel}>Progreso general</Text>
             <Text style={styles.achievementSummaryValue}>
@@ -475,7 +494,9 @@ const ProfileScreen = ({
                 />
               </View>
 
-              <Text style={styles.nextBadgeHint}>{nextBadge.progressLabel}</Text>
+              <Text style={styles.nextBadgeHint}>
+                {nextBadge.progressLabel} · {achievementSummary.nextLevelRemaining} pts para el siguiente nivel
+              </Text>
             </View>
           ) : (
             <View style={styles.completedBadgeCard}>
@@ -615,8 +636,11 @@ const ProfileScreen = ({
         <View style={styles.statsStrip}>
           {statItems.map((item) => (
             <View key={item.label} style={styles.statCard}>
+              <Text style={styles.statEyebrow}>{item.label}</Text>
               <Text style={styles.statValue}>{item.value}</Text>
-              <Text style={styles.statLabel}>{item.label}</Text>
+              <Text style={styles.statLabel}>
+                {item.label === 'Reseñas' ? 'Señales activas' : 'Pulso del perfil'}
+              </Text>
             </View>
           ))}
         </View>
@@ -861,6 +885,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
+  statEyebrow: {
+    color: '#A78BFA',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
   statValue: {
     color: 'white',
     fontSize: 20,
@@ -1029,6 +1060,56 @@ const styles = StyleSheet.create({
   avatarFrameChipText: {
     color: '#E9D5FF',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  levelSummaryCard: {
+    borderRadius: 20,
+    padding: 14,
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  levelSummaryCopy: {
+    flex: 1,
+    gap: 5,
+  },
+  levelSummaryEyebrow: {
+    color: '#C4B5FD',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  levelSummaryTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  levelSummaryText: {
+    color: '#D1D5DB',
+    lineHeight: 19,
+  },
+  levelSummaryBadge: {
+    minWidth: 68,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(250,204,21,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(250,204,21,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  levelSummaryBadgeValue: {
+    color: '#FDE68A',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  levelSummaryBadgeLabel: {
+    color: '#FDE68A',
+    fontSize: 11,
     fontWeight: '800',
   },
   achievementBadgesRow: {

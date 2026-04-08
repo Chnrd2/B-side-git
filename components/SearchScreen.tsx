@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -333,7 +333,7 @@ const SearchScreen = ({
               </Text>
               <Text style={styles.oracleText}>
                 {showExpandedOracle
-                  ? 'Cruza tu Top 5, tus reseñas y tus escuchas para acercarte algo nuevo sin perder tu identidad musical.'
+                  ? 'Cruza tu Top 5, tus reseñas y tus escuchas para acercarte a algo nuevo sin perder tu identidad musical.'
                   : isSearching
                     ? 'Buscá tranquilo: el Oráculo se resume para no taparte los resultados.'
                     : 'Pedí una nueva tanda cuando quieras abrir el radar sin perder tu eje.'}
@@ -502,7 +502,13 @@ const SearchScreen = ({
                   key={item.id}
                   style={styles.resultItem}
                   onPress={() => onSelectAlbum(item)}>
-                  <Image source={{ uri: item.cover }} style={styles.albumCover} />
+                  {item.cover ? (
+                    <Image source={{ uri: item.cover }} style={styles.albumCover} />
+                  ) : (
+                    <View style={[styles.albumCover, styles.resultCoverFallback]}>
+                      <Disc color="#A855F7" size={18} />
+                    </View>
+                  )}
                   <View style={styles.infoContainer}>
                     <Text style={styles.albumTitle} numberOfLines={1}>
                       {item.title}
@@ -976,6 +982,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#111827',
   },
+  resultCoverFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   infoContainer: {
     flex: 1,
     gap: 4,
@@ -1012,3 +1022,6 @@ const styles = StyleSheet.create({
 });
 
 export default SearchScreen;
+
+
+
