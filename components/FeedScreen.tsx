@@ -175,6 +175,8 @@ const DayCard = React.memo(({
   onOpenReviewWhileListening,
   onSelectAlbum,
 }) => {
+  const entrance = useRef(new Animated.Value(0)).current;
+  const spotlight = useRef(new Animated.Value(0.96)).current;
   const artwork =
     currentTrack?.cover || dailyMusicSummary?.latestEntry?.cover || latestListen?.cover || '';
   const title =
@@ -191,8 +193,47 @@ const DayCard = React.memo(({
         ? 'Tenés algo fresco para retomar sin pensar demasiado.'
         : 'Arrancá con una escucha y esta parte se vuelve el centro de la app.');
 
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(entrance, {
+        toValue: 1,
+        duration: 420,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(spotlight, {
+          toValue: 1.02,
+          duration: 240,
+          useNativeDriver: true,
+        }),
+        Animated.spring(spotlight, {
+          toValue: 1,
+          useNativeDriver: true,
+          speed: 14,
+          bounciness: 8,
+        }),
+      ]),
+    ]).start();
+  }, [entrance, spotlight]);
+
   return (
-    <View style={[styles.panel, styles.heroPanel]}>
+    <Animated.View
+      style={[
+        styles.panel,
+        styles.heroPanel,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [14, 0],
+              }),
+            },
+            { scale: spotlight },
+          ],
+        },
+      ]}>
       <View style={styles.heroGlowLarge} />
       <View style={styles.heroGlowSmall} />
 
@@ -227,6 +268,16 @@ const DayCard = React.memo(({
         </View>
       </View>
 
+      <View style={styles.artistSpotlightCard}>
+        <Text style={styles.artistSpotlightEyebrow}>ARTISTA DEL DÍA</Text>
+        <Text style={styles.artistSpotlightTitle}>
+          {dailyMusicSummary?.topArtist || 'Todavía sin protagonista'}
+        </Text>
+        <Text style={styles.artistSpotlightText}>
+          {dailyMusicSummary?.artistSpotlight || 'Tu próxima escucha puede cambiar el tono del día.'}
+        </Text>
+      </View>
+
       <View style={styles.heroStatRow}>
         <View style={styles.heroStatPill}>
           <Headphones color="#C4B5FD" size={15} />
@@ -237,7 +288,7 @@ const DayCard = React.memo(({
         <View style={styles.heroStatPill}>
           <Sparkles color="#FDE68A" size={15} />
           <Text style={styles.heroStatValue}>
-            Modo {dailyMusicSummary?.moodLabel || 'libre'}
+            {dailyMusicSummary?.moodEmoji || '✨'} {dailyMusicSummary?.moodLabel || 'libre'}
           </Text>
         </View>
         <View style={[styles.heroStatPill, listeningStreak?.isAtRisk && styles.heroStatPillWarn]}>
@@ -284,7 +335,7 @@ const DayCard = React.memo(({
           </TouchableOpacity>
         ) : null}
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
@@ -473,7 +524,8 @@ const ProInsightsCard = React.memo(
             <Text style={styles.kicker}>B-SIDE PRO</Text>
             <Text style={styles.panelTitle}>Desbloqueá tu lado más fino</Text>
             <Text style={styles.panelText}>
-              Stats avanzados, comparativas detalladas e insights de escucha en un solo lugar.
+              {dailyMusicSummary?.proTease ||
+                'Descubrí tus patrones reales de escucha y comparate con otros perfiles.'}
             </Text>
           </View>
           <View style={[styles.levelChip, styles.proBadge]}>
@@ -484,10 +536,10 @@ const ProInsightsCard = React.memo(
 
         <View style={styles.proTeaserRow}>
           <View style={styles.proTeaserPill}>
-            <Text style={styles.proTeaserText}>Pico del día</Text>
+            <Text style={styles.proTeaserText}>Patrones reales</Text>
           </View>
           <View style={styles.proTeaserPill}>
-            <Text style={styles.proTeaserText}>Comparativas reales</Text>
+            <Text style={styles.proTeaserText}>Comparate con otros</Text>
           </View>
           <View style={styles.proTeaserPill}>
             <Text style={styles.proTeaserText}>Perfil más tuyo</Text>
@@ -977,6 +1029,31 @@ const styles = StyleSheet.create({
   heroArtist: { color: '#C4B5FD', fontSize: 15, fontWeight: '800' },
   heroText: { color: '#E5E7EB', lineHeight: 21, fontSize: 14 },
   heroMicroReward: { color: '#FDE68A', fontSize: 12, fontWeight: '800' },
+  artistSpotlightCard: {
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 4,
+  },
+  artistSpotlightEyebrow: {
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  artistSpotlightTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  artistSpotlightText: {
+    color: '#D1D5DB',
+    lineHeight: 19,
+    fontSize: 13,
+  },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   artwork: { width: 56, height: 56, borderRadius: 16 },

@@ -461,6 +461,7 @@ const buildDailyMusicSummary = ({
   currentTrack = null,
   achievementSummary = null,
   ownReviews = [],
+  listeningStreak = null,
 } = {}) => {
   const todayKey = getLocalDayKey(new Date());
   const todayEntries = [...listeningHistory]
@@ -506,17 +507,21 @@ const buildDailyMusicSummary = ({
 
   let moodLabel = 'Sin señal';
   let moodCopy = 'Tu día musical espera el primer play.';
+  let moodEmoji = '✨';
 
   if (tracksToday > 0) {
     if (dayWindowLabel === 'noche' || dayWindowLabel === 'madrugada') {
       moodLabel = 'Nocturno';
-      moodCopy = 'Hoy venís en modo nocturno. Lo que suena tarde te está marcando el tono.';
+      moodEmoji = '🌙';
+      moodCopy = 'Hoy estuviste en modo nocturno. Lo que suena tarde te está marcando el tono.';
     } else if (tracksToday >= 5 || uniqueArtistsCount >= 4 || todayReviews.length >= 2) {
       moodLabel = 'Intenso';
+      moodEmoji = '🔥';
       moodCopy = 'Hoy venís intenso. Hay movimiento, criterio y ganas de seguir explorando.';
     } else {
       moodLabel = 'Chill';
-      moodCopy = 'Hoy venís chill. Pocas vueltas, pero bien elegidas.';
+      moodEmoji = '☁️';
+      moodCopy = 'Hoy estuviste en modo chill. Pocas vueltas, pero bien elegidas.';
     }
   }
 
@@ -526,9 +531,12 @@ const buildDailyMusicSummary = ({
     : tracksToday
       ? 'Tu día ya empezó 🎧'
       : 'Tu día musical espera play';
-  const welcomeCopy = tracksToday
-    ? 'Abriste la app en el momento justo para seguir con tu sonido.'
-    : 'Abrí un disco, dejá una reseña y hacé que el día agarre forma.';
+  const welcomeCopy =
+    listeningStreak?.current && tracksToday
+      ? `Volviste 🔥 tu racha sigue viva con ${listeningStreak.current} días.`
+      : tracksToday
+        ? 'Volviste justo a tiempo para seguir con tu sonido.'
+        : 'Abrí un disco, dejá una reseña y hacé que el día agarre forma.';
   const activityLine = currentTrack
     ? `Ahora mismo suena ${currentTrack.title}.`
     : latestTodayEntry
@@ -538,7 +546,15 @@ const buildDailyMusicSummary = ({
   const proInsightLine =
     tracksToday > 0
       ? `Tu pico fue en la ${dayWindowLabel} y ${topArtist} dominó la jornada.`
-      : 'Cuando metas tus primeras escuchas del día, acá aparecen patrones más finos.';
+      : 'Cuando metas tus primeras escuchas del día, acá aparecen tus patrones reales.';
+  const proTease =
+    tracksToday > 0
+      ? 'Descubrí tus patrones reales de escucha y comparate con otros perfiles.'
+      : 'Desbloqueá insights para entender cómo cambia tu escucha día a día.';
+  const artistSpotlight =
+    tracksToday > 0
+      ? `${topArtist} te marcó el pulso con ${topArtistCount} plays.`
+      : 'Todavía no hay un artista dominando el día.';
 
   return {
     tracksToday,
@@ -547,10 +563,12 @@ const buildDailyMusicSummary = ({
     topArtistCount,
     uniqueArtistsCount,
     moodLabel,
+    moodEmoji,
     moodCopy,
     headline,
     welcomeCopy,
     activityLine,
+    artistSpotlight,
     dayWindowLabel,
     dominantSource,
     latestEntry: latestTodayEntry,
@@ -559,6 +577,7 @@ const buildDailyMusicSummary = ({
       'Más activo que el 60% de los perfiles nuevos',
     activityPercentile: achievementSummary?.activityPercentile || 60,
     proInsightLine,
+    proTease,
     hasActivity: tracksToday > 0,
   };
 };
@@ -1050,8 +1069,9 @@ export default function useBSideApp() {
         currentTrack,
         achievementSummary,
         ownReviews,
+        listeningStreak,
       }),
-    [achievementSummary, currentTrack, listeningHistory, ownReviews]
+    [achievementSummary, currentTrack, listeningHistory, listeningStreak, ownReviews]
   );
   const wishlistList = useMemo(
     () => ({
