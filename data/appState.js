@@ -342,6 +342,16 @@ export const normalizeReview = (review = {}) => ({
     ? review.comments.map((comment) => normalizeComment(comment))
     : [],
   createdAt: toIsoDate(review?.createdAt),
+  interactionUpdatedAt: toIsoDate(
+    review?.interactionUpdatedAt || review?.updatedAt || review?.createdAt
+  ),
+  likesCount: Array.isArray(review?.likedBy)
+    ? [...new Set(review.likedBy.map((handle) => normalizeHandle(handle)))].length
+    : 0,
+  scratchCount: review?.scratchedBy ? 1 : 0,
+  commentsCount: Array.isArray(review?.comments)
+    ? review.comments.length
+    : 0,
   contextType: review?.contextType || 'standard',
 });
 

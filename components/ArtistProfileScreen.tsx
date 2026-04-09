@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Linking,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import {
 } from 'lucide-react-native';
 
 import { fetchArtistCatalogProfile, getPlaybackState } from '../lib/musicCatalog';
+import SafeArtwork from './SafeArtwork';
 
 const ArtistAlbumCard = ({ album, onSelectAlbum, onPlaySong }) => {
   const playbackState = getPlaybackState(album);
@@ -28,13 +28,13 @@ const ArtistAlbumCard = ({ album, onSelectAlbum, onPlaySong }) => {
       style={styles.albumCard}
       activeOpacity={0.88}
       onPress={() => onSelectAlbum?.(album)}>
-      {album.cover ? (
-        <Image source={{ uri: album.cover }} style={styles.albumCover} />
-      ) : (
-        <View style={styles.albumFallback}>
-          <Music4 color="#E9D5FF" size={20} />
-        </View>
-      )}
+      <SafeArtwork
+        uri={album.cover}
+        style={styles.albumCover}
+        variant="album"
+        label="Sin portada"
+        showLabel={true}
+      />
 
       <Text style={styles.albumTitle} numberOfLines={1}>
         {album.title}
@@ -79,13 +79,13 @@ const RelatedArtistCard = ({ artist, onOpenArtist }) => (
         source: artist.source,
       })
     }>
-    {artist.cover ? (
-      <Image source={{ uri: artist.cover }} style={styles.relatedArtistCover} />
-    ) : (
-      <View style={styles.relatedArtistFallback}>
-        <Music4 color="#E9D5FF" size={20} />
-      </View>
-    )}
+    <SafeArtwork
+      uri={artist.cover}
+      style={styles.relatedArtistCover}
+      variant="artist"
+      label="Sin foto"
+      showLabel={true}
+    />
     <Text style={styles.relatedArtistName} numberOfLines={1}>
       {artist.name}
     </Text>
@@ -187,7 +187,9 @@ const ArtistProfileScreen = ({
     try {
       await Linking.openURL(nextUrl);
     } catch (error) {
-      console.warn('No pudimos abrir el artista afuera:', error);
+      if (__DEV__) {
+        console.warn('No pudimos abrir el artista afuera:', error);
+      }
     }
   };
 
@@ -208,13 +210,13 @@ const ArtistProfileScreen = ({
         </View>
 
         <View style={styles.hero}>
-          {catalogProfile.artist.cover ? (
-            <Image source={{ uri: catalogProfile.artist.cover }} style={styles.heroCover} />
-          ) : (
-            <View style={styles.heroFallback}>
-              <Music4 color="#E9D5FF" size={52} />
-            </View>
-          )}
+          <SafeArtwork
+            uri={catalogProfile.artist.cover}
+            style={styles.heroCover}
+            variant="artist"
+            label="Sin foto"
+            showLabel={true}
+          />
 
           <Text style={styles.artistName}>{catalogProfile.artist.name}</Text>
           <View style={styles.heroChipsRow}>

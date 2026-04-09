@@ -1,7 +1,6 @@
 ﻿import React, { useState } from 'react';
 import {
   Alert,
-  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -37,6 +36,7 @@ import {
 import { buildProfileTheme } from '../data/appState';
 import ProfileEditModal from './ProfileEditModal';
 import ProfileHero from './ProfileHero';
+import SafeArtwork from './SafeArtwork';
 
 const ACHIEVEMENT_ICON_MAP = {
   pen: Edit2,
@@ -59,6 +59,7 @@ const ProfileScreen = ({
   onShareProfile,
   onOpenStory,
   onOpenAccount,
+  onOpenPlans,
   onOpenFoundation,
   onOpenPrivacy,
   onSaveProfile,
@@ -180,7 +181,12 @@ const ProfileScreen = ({
               key={item.id}
               style={styles.top5Item}
               onPress={() => onPlaySong(item)}>
-              <Image source={{ uri: item.cover }} style={styles.top5Image} />
+              <SafeArtwork
+                uri={item.cover}
+                style={styles.top5Image}
+                variant="album"
+                label="Sin portada"
+              />
               <Text style={styles.top5Title} numberOfLines={1}>
                 {item.title}
               </Text>
@@ -231,16 +237,12 @@ const ProfileScreen = ({
 
           {latestListen ? (
             <View style={styles.latestListenRow}>
-              {latestListen.cover ? (
-                <Image
-                  source={{ uri: latestListen.cover }}
-                  style={styles.latestListenCover}
-                />
-              ) : (
-                <View style={styles.latestListenPlaceholder}>
-                  <Headphones color="#A855F7" size={18} />
-                </View>
-              )}
+              <SafeArtwork
+                uri={latestListen.cover}
+                style={styles.latestListenCover}
+                variant="track"
+                label="Sin portada"
+              />
               <View style={styles.latestListenInfo}>
                 <Text style={styles.latestListenEyebrow}>ÚLTIMA ESCUCHA</Text>
                 <Text style={styles.latestListenTitle} numberOfLines={1}>
@@ -306,9 +308,10 @@ const ProfileScreen = ({
                   { backgroundColor: candidate.avatarColor || '#8A2BE2' },
                 ]}>
                 {candidate.avatarUrl ? (
-                  <Image
-                    source={{ uri: candidate.avatarUrl }}
+                  <SafeArtwork
+                    uri={candidate.avatarUrl}
                     style={styles.suggestedAvatarImage}
+                    variant="user"
                   />
                 ) : (
                   <UserRound color="white" size={18} />
@@ -377,12 +380,12 @@ const ProfileScreen = ({
               <Text style={styles.achievementEyebrow}>LOGROS Y DESBLOQUEOS</Text>
               <Text style={styles.achievementTitle}>
                 {unlockedBadges.length
-                  ? `${achievementSummary.unlockedCount}/${achievementSummary.totalCount} desbloqueados`
-                  : 'Todavía no desbloqueaste logros'}
+                  ? `Ya destrabaste ${achievementSummary.unlockedCount} de ${achievementSummary.totalCount}`
+                  : 'Tu primer logro está a un paso'}
               </Text>
               <Text style={styles.achievementText}>
                 {achievementSummary.avatarFrame?.id === 'default'
-                  ? 'Cada reseña, escucha y mejora de perfil suma progreso y destraba nuevos detalles.'
+                  ? 'Cada reseña, escucha y mejora de perfil te hace pesar un poco más.'
                   : `Ya destrabaste el marco ${achievementSummary.avatarFrame.label.toLowerCase()} para tu avatar.`}
               </Text>
             </View>
@@ -396,12 +399,15 @@ const ProfileScreen = ({
 
           <View style={styles.levelSummaryCard}>
             <View style={styles.levelSummaryCopy}>
-              <Text style={styles.levelSummaryEyebrow}>NIVEL ACTUAL</Text>
+              <Text style={styles.levelSummaryEyebrow}>TU MOMENTO</Text>
               <Text style={styles.levelSummaryTitle}>
-                Nivel {achievementSummary.level} · {achievementSummary.levelTitle}
+                {achievementSummary.levelHeadline}
               </Text>
               <Text style={styles.levelSummaryText}>
                 {achievementSummary.momentumCopy}
+              </Text>
+              <Text style={styles.levelSummaryMeta}>
+                {achievementSummary.comparisonCopy}
               </Text>
             </View>
 
@@ -471,7 +477,7 @@ const ProfileScreen = ({
           {nextBadge ? (
             <View style={styles.nextBadgeCard}>
               <View style={styles.nextBadgeTopRow}>
-                <Text style={styles.nextBadgeLabel}>SIGUIENTE META</Text>
+                <Text style={styles.nextBadgeLabel}>LO QUE VIENE</Text>
                 <Text style={styles.nextBadgeProgressText}>
                   {nextBadge.value}/{nextBadge.threshold}
                 </Text>
@@ -495,16 +501,86 @@ const ProfileScreen = ({
               </View>
 
               <Text style={styles.nextBadgeHint}>
-                {nextBadge.progressLabel} · {achievementSummary.nextLevelRemaining} pts para el siguiente nivel
+                {nextBadge.progressLabel} · {achievementSummary.nextLevelRemaining} pts para el próximo salto
               </Text>
             </View>
           ) : (
             <View style={styles.completedBadgeCard}>
               <Sparkles color="#FDE68A" size={16} />
               <Text style={styles.completedBadgeText}>
-                Ya desbloqueaste todos los logros de esta etapa.
+                Ya destrabaste todo lo de esta etapa.
               </Text>
             </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderIdentitySection = () => {
+    if (isPublic || !achievementSummary) return null;
+
+    const leadingArtist = recentListening[0]?.artist || top5[0]?.artist || 'Todavía sin artista dominante';
+    const identityLine =
+      user?.plan === 'plus'
+        ? 'Tu escucha ya tiene una lectura mucho más fina.'
+        : 'Hay una capa más profunda de tu identidad musical lista para destrabarse.';
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Tu identidad musical</Text>
+
+        <View style={styles.identityCard}>
+          <View style={styles.identityHeader}>
+            <View style={styles.identityCopy}>
+              <Text style={styles.identityEyebrow}>
+                {user?.plan === 'plus' ? 'B-SIDE PRO' : 'TU PERFIL EN UNA LÍNEA'}
+              </Text>
+              <Text style={styles.identityTitle}>
+                {user?.plan === 'plus'
+                  ? 'Tus insights ya están activos'
+                  : 'Tu perfil destaca en...'}
+              </Text>
+              <Text style={styles.identityText}>{identityLine}</Text>
+            </View>
+
+            <View
+              style={[
+                styles.identityBadge,
+                user?.plan === 'plus' && styles.identityBadgePro,
+              ]}>
+              <Text style={styles.identityBadgeText}>
+                {user?.plan === 'plus' ? 'Pro' : 'Free'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.identityStatsRow}>
+            <View style={styles.identityStatCard}>
+              <Text style={styles.identityStatLabel}>Artista del momento</Text>
+              <Text style={styles.identityStatValue}>{leadingArtist}</Text>
+            </View>
+            <View style={styles.identityStatCard}>
+              <Text style={styles.identityStatLabel}>Perfil</Text>
+              <Text style={styles.identityStatValue}>{achievementSummary.levelHeadline}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.identityHighlight}>
+            {achievementSummary.comparisonCopy}
+          </Text>
+
+          {user?.plan === 'plus' ? (
+            <View style={styles.identityProList}>
+              <Text style={styles.identityProItem}>• Comparativas más precisas</Text>
+              <Text style={styles.identityProItem}>• Lectura más fina de tu ritmo</Text>
+              <Text style={styles.identityProItem}>• Personalización avanzada del perfil</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.identityCta} onPress={onOpenPlans}>
+              <Crown color="#FDE68A" size={16} />
+              <Text style={styles.identityCtaText}>Desbloquear con B-Side Pro</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -545,13 +621,12 @@ const ProfileScreen = ({
               ) : null}
 
               <View style={styles.reviewHeaderContent}>
-                {review.cover ? (
-                  <Image source={{ uri: review.cover }} style={styles.reviewCover} />
-                ) : (
-                  <View style={styles.reviewCoverPlaceholder}>
-                    <Text style={styles.placeholderText}>CD</Text>
-                  </View>
-                )}
+                <SafeArtwork
+                  uri={review.cover}
+                  style={styles.reviewCover}
+                  variant="album"
+                  label="Sin portada"
+                />
                 <View style={styles.reviewInfoContent}>
                   <Text style={styles.reviewAlbum} numberOfLines={1}>
                     {review.albumTitle}
@@ -705,6 +780,7 @@ const ProfileScreen = ({
           <>
             {renderListeningSection()}
             {renderAchievementsSection()}
+            {renderIdentitySection()}
             {renderTopSection()}
             {renderSuggestedUsersSection()}
             {renderReviewsSection()}
@@ -723,6 +799,15 @@ const ProfileScreen = ({
                 <X color="white" size={24} />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => {
+                setIsSettingsVisible(false);
+                onOpenPlans?.();
+              }}>
+              <Crown color="#A855F7" size={20} />
+              <Text style={styles.settingText}>B-Side Pro</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => {
@@ -1091,6 +1176,11 @@ const styles = StyleSheet.create({
     color: '#D1D5DB',
     lineHeight: 19,
   },
+  levelSummaryMeta: {
+    color: '#FDE68A',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   levelSummaryBadge: {
     minWidth: 68,
     borderRadius: 18,
@@ -1220,6 +1310,107 @@ const styles = StyleSheet.create({
     color: '#FDE68A',
     lineHeight: 19,
     fontWeight: '700',
+  },
+  identityCard: {
+    borderRadius: 24,
+    padding: 18,
+    gap: 14,
+    backgroundColor: 'rgba(8, 11, 21, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(168,85,247,0.16)',
+  },
+  identityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  identityCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  identityEyebrow: {
+    color: '#A78BFA',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  identityTitle: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  identityText: {
+    color: '#D1D5DB',
+    lineHeight: 20,
+  },
+  identityBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  identityBadgePro: {
+    backgroundColor: 'rgba(250,204,21,0.12)',
+    borderColor: 'rgba(250,204,21,0.22)',
+  },
+  identityBadgeText: {
+    color: '#FDE68A',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  identityStatsRow: {
+    gap: 10,
+  },
+  identityStatCard: {
+    borderRadius: 18,
+    padding: 14,
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  identityStatLabel: {
+    color: '#9CA3AF',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  identityStatValue: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  identityHighlight: {
+    color: '#FDE68A',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  identityProList: {
+    gap: 8,
+  },
+  identityProItem: {
+    color: '#E5E7EB',
+    lineHeight: 20,
+  },
+  identityCta: {
+    minHeight: 46,
+    borderRadius: 16,
+    backgroundColor: '#8A2BE2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  identityCtaText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '900',
   },
   listeningTopRow: {
     flexDirection: 'row',

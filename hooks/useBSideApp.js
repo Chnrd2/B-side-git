@@ -235,6 +235,72 @@ const getTimestampValue = (value) => {
   return Number.isNaN(nextTimestamp) ? 0 : nextTimestamp;
 };
 
+const getReviewInteractionTimestamp = (review = {}) =>
+  getTimestampValue(review?.interactionUpdatedAt || review?.createdAt);
+
+const mergeReviewComments = (...collections) => {
+  const commentMap = new Map();
+
+  collections.flat().forEach((comment) => {
+    const normalizedComment = normalizeComment(comment);
+    const commentKey =
+      normalizedComment.backendId ||
+      normalizedComment.id ||
+      `${normalizedComment.user}:${normalizedComment.createdAt}:${normalizedComment.text}`;
+
+    commentMap.set(commentKey, normalizedComment);
+  });
+
+  return Array.from(commentMap.values()).sort(
+    (left, right) =>
+      getTimestampValue(left.createdAt) - getTimestampValue(right.createdAt)
+  );
+};
+
+const mergeReviewCollections = (localReviews = [], incomingReviews = []) => {
+  const reviewMap = new Map();
+
+  [...localReviews, ...incomingReviews].forEach((review) => {
+    const normalizedReview = normalizeReview(review);
+    const reviewKey = getEntityMergeKey(normalizedReview, 'review');
+    const existingReview = reviewMap.get(reviewKey);
+
+    if (!existingReview) {
+      reviewMap.set(reviewKey, normalizedReview);
+      return;
+    }
+
+    const existingTimestamp = getReviewInteractionTimestamp(existingReview);
+    const incomingTimestamp = getReviewInteractionTimestamp(normalizedReview);
+    const preferredReview =
+      existingTimestamp > incomingTimestamp ? existingReview : normalizedReview;
+    const fallbackReview =
+      preferredReview === existingReview ? normalizedReview : existingReview;
+
+    reviewMap.set(
+      reviewKey,
+      normalizeReview({
+        ...fallbackReview,
+        ...preferredReview,
+        likedBy: preferredReview.likedBy,
+        comments: mergeReviewComments(
+          existingReview.comments,
+          normalizedReview.comments
+        ),
+        scratchedBy:
+          preferredReview.scratchedBy || fallbackReview.scratchedBy || null,
+        interactionUpdatedAt:
+          preferredReview.interactionUpdatedAt ||
+          preferredReview.createdAt ||
+          fallbackReview.interactionUpdatedAt ||
+          fallbackReview.createdAt,
+      })
+    );
+  });
+
+  return Array.from(reviewMap.values());
+};
+
 const getLocalDayKey = (value) => {
   const nextDate = value ? new Date(value) : null;
 
@@ -367,6 +433,133 @@ const buildListeningStreakSummary = (history = []) => {
       (entry) => Date.now() - getTimestampValue(entry.createdAt) <= 7 * 86400000
     ).length,
     lastEntry: sortedHistory[0] || null,
+  };
+};
+
+const getDayWindowLabel = (hour = 12) => {
+  if (hour >= 0 && hour < 6) return 'madrugada';
+  if (hour < 12) return 'mañana';
+  if (hour < 19) return 'tarde';
+  return 'noche';
+};
+
+const getSourceLabel = (source = '') => {
+  const normalizedSource = `${source}`.trim().toLowerCase();
+
+  if (!normalizedSource) return 'B-Side';
+  if (normalizedSource.includes('spotify')) return 'Spotify';
+  if (normalizedSource.includes('friend')) return 'tu círculo';
+  if (normalizedSource.includes('discovery')) return 'descubrimiento';
+  if (normalizedSource.includes('wishlist')) return 'Por escuchar';
+  if (normalizedSource.includes('top')) return 'tu Top 5';
+  if (normalizedSource.includes('profile')) return 'tu perfil';
+  return 'B-Side';
+};
+
+const buildDailyMusicSummary = ({
+  listeningHistory = [],
+  currentTrack = null,
+  achievementSummary = null,
+  ownReviews = [],
+} = {}) => {
+  const todayKey = getLocalDayKey(new Date());
+  const todayEntries = [...listeningHistory]
+    .filter((entry) => getLocalDayKey(entry.createdAt) === todayKey)
+    .sort(
+      (left, right) =>
+        getTimestampValue(right.createdAt) - getTimestampValue(left.createdAt)
+    );
+  const todayReviews = ownReviews.filter(
+    (review) => getLocalDayKey(review.createdAt) === todayKey
+  );
+
+  const artistCounts = new Map();
+  const sourceCounts = new Map();
+  const hours = [];
+
+  todayEntries.forEach((entry) => {
+    const artistKey = `${entry.artist || 'Artista'}`.trim();
+    artistCounts.set(artistKey, (artistCounts.get(artistKey) || 0) + 1);
+
+    const sourceLabel = getSourceLabel(entry.source);
+    sourceCounts.set(sourceLabel, (sourceCounts.get(sourceLabel) || 0) + 1);
+
+    const entryDate = entry.createdAt ? new Date(entry.createdAt) : null;
+    if (entryDate && !Number.isNaN(entryDate.getTime())) {
+      hours.push(entryDate.getHours());
+    }
+  });
+
+  const [topArtist = 'Por definirse', topArtistCount = 0] =
+    [...artistCounts.entries()].sort((left, right) => right[1] - left[1])[0] || [];
+  const [dominantSource = 'B-Side'] =
+    [...sourceCounts.entries()].sort((left, right) => right[1] - left[1])[0] || [];
+
+  const dominantHour =
+    hours.length > 0
+      ? Math.round(hours.reduce((accumulator, value) => accumulator + value, 0) / hours.length)
+      : null;
+  const dayWindowLabel =
+    dominantHour === null ? 'día abierto' : getDayWindowLabel(dominantHour);
+  const uniqueArtistsCount = artistCounts.size;
+  const tracksToday = todayEntries.length;
+
+  let moodLabel = 'Sin señal';
+  let moodCopy = 'Tu día musical espera el primer play.';
+
+  if (tracksToday > 0) {
+    if (dayWindowLabel === 'noche' || dayWindowLabel === 'madrugada') {
+      moodLabel = 'Nocturno';
+      moodCopy = 'Hoy venís en modo nocturno. Lo que suena tarde te está marcando el tono.';
+    } else if (tracksToday >= 5 || uniqueArtistsCount >= 4 || todayReviews.length >= 2) {
+      moodLabel = 'Intenso';
+      moodCopy = 'Hoy venís intenso. Hay movimiento, criterio y ganas de seguir explorando.';
+    } else {
+      moodLabel = 'Chill';
+      moodCopy = 'Hoy venís chill. Pocas vueltas, pero bien elegidas.';
+    }
+  }
+
+  const latestTodayEntry = todayEntries[0] || null;
+  const headline = currentTrack
+    ? 'Tu día ya está sonando'
+    : tracksToday
+      ? 'Tu día ya empezó 🎧'
+      : 'Tu día musical espera play';
+  const welcomeCopy = tracksToday
+    ? 'Abriste la app en el momento justo para seguir con tu sonido.'
+    : 'Abrí un disco, dejá una reseña y hacé que el día agarre forma.';
+  const activityLine = currentTrack
+    ? `Ahora mismo suena ${currentTrack.title}.`
+    : latestTodayEntry
+      ? `Tu último play fue ${latestTodayEntry.title}.`
+      : 'Todavía no hay actividad para leer.';
+
+  const proInsightLine =
+    tracksToday > 0
+      ? `Tu pico fue en la ${dayWindowLabel} y ${topArtist} dominó la jornada.`
+      : 'Cuando metas tus primeras escuchas del día, acá aparecen patrones más finos.';
+
+  return {
+    tracksToday,
+    todayReviewsCount: todayReviews.length,
+    topArtist,
+    topArtistCount,
+    uniqueArtistsCount,
+    moodLabel,
+    moodCopy,
+    headline,
+    welcomeCopy,
+    activityLine,
+    dayWindowLabel,
+    dominantSource,
+    latestEntry: latestTodayEntry,
+    comparisonCopy:
+      achievementSummary?.comparisonCopy ||
+      'Más activo que el 60% de los perfiles nuevos',
+    activityPercentile: achievementSummary?.activityPercentile || 60,
+    proInsightLine,
+    hasActivity: tracksToday > 0,
   };
 };
 
@@ -586,6 +779,10 @@ export default function useBSideApp() {
 
   const logAchievementsDebug = (scope, payload = {}) => {
     logProductDebug('achievement-sync', scope, payload);
+  };
+
+  const logInteractionDebug = (scope, payload = {}) => {
+    logProductDebug('interaction-sync', scope, payload);
   };
 
   const clearUserScopedState = () => {
@@ -845,6 +1042,16 @@ export default function useBSideApp() {
       recommendationsSentCount,
       top5.length,
     ]
+  );
+  const dailyMusicSummary = useMemo(
+    () =>
+      buildDailyMusicSummary({
+        listeningHistory,
+        currentTrack,
+        achievementSummary,
+        ownReviews,
+      }),
+    [achievementSummary, currentTrack, listeningHistory, ownReviews]
   );
   const wishlistList = useMemo(
     () => ({
@@ -1951,12 +2158,12 @@ export default function useBSideApp() {
       }
 
       if (communityReviewsSnapshot.ok) {
+        logInteractionDebug('reviews_refresh:community', {
+          localCount: reviewsRef.current.length,
+          incomingCount: communityReviewsSnapshot.reviews.length,
+        });
         setReviews((prevReviews) =>
-          mergeEntitiesBySource(
-            'review',
-            communityReviewsSnapshot.reviews,
-            prevReviews
-          )
+          mergeReviewCollections(prevReviews, communityReviewsSnapshot.reviews)
         );
       } else if (communityReviewsSnapshot.message) {
         setAuthMessage((prevMessage) => prevMessage || communityReviewsSnapshot.message);
@@ -2016,8 +2223,12 @@ export default function useBSideApp() {
       setFollowingHandles(remoteState.followingHandles);
       setBlockedHandles(remoteState.blockedHandles);
       setReports(remoteState.reports);
+      logInteractionDebug('reviews_refresh:authenticated_extras', {
+        localCount: reviewsRef.current.length,
+        incomingCount: remoteState.reviews.length,
+      });
       setReviews((prevReviews) =>
-        mergeEntitiesBySource('review', remoteState.reviews, prevReviews)
+        mergeReviewCollections(prevReviews, remoteState.reviews)
       );
       setLists((prevLists) =>
         mergeEntitiesBySource('list', remoteState.lists, prevLists)
@@ -2679,7 +2890,7 @@ export default function useBSideApp() {
       ? mergeReportsById(socialSnapshot.reports, localReports)
       : localReports;
     const nextReviews = remoteReviewsSnapshot.ok
-      ? mergeEntitiesBySource('review', localReviews, remoteReviewsSnapshot.reviews)
+      ? mergeReviewCollections(localReviews, remoteReviewsSnapshot.reviews)
       : localReviews;
     const nextLists = remoteListsSnapshot.ok
       ? mergeEntitiesBySource('list', localLists, remoteListsSnapshot.lists)
@@ -2912,6 +3123,14 @@ export default function useBSideApp() {
         ? initialState.blockedHandles
         : blockedHandlesRef.current,
       localReports: userChanged ? initialState.reports : reportsRef.current,
+    });
+
+    logInteractionDebug('reviews_refresh:auth_user', {
+      source: options.source || 'manual',
+      userId: snapshot.session.user.id,
+      userChanged,
+      localCount: (userChanged ? initialState.reviews : reviewsRef.current).length,
+      incomingCount: remoteState.reviews.length,
     });
 
     if (refreshSequence !== authRefreshSequenceRef.current) {
@@ -4425,6 +4644,7 @@ export default function useBSideApp() {
 
   const toggleScratch = (reviewId) => {
     let scratchState = null;
+    const interactionUpdatedAt = new Date().toISOString();
 
     setReviews((prevReviews) =>
       prevReviews.map((review) => {
@@ -4434,14 +4654,24 @@ export default function useBSideApp() {
         scratchState = {
           isScratched: !isScratched,
           albumTitle: review.albumTitle,
+          reviewId: review.id,
         };
 
-        return {
+        return normalizeReview({
           ...review,
           scratchedBy: isScratched ? null : currentUserHandle,
-        };
+          interactionUpdatedAt,
+        });
       })
     );
+
+    if (scratchState) {
+      logInteractionDebug('scratch:optimistic', {
+        reviewId: scratchState.reviewId,
+        scratched: scratchState.isScratched,
+        handle: currentUserHandle,
+      });
+    }
 
     if (scratchState?.isScratched) {
       pushNotification({
@@ -4455,7 +4685,7 @@ export default function useBSideApp() {
 
   const toggleReviewLike = (reviewId) => {
     let likeState = null;
-    const targetReview = reviews.find((review) => review.id === reviewId);
+    const interactionUpdatedAt = new Date().toISOString();
 
     setReviews((prevReviews) =>
       prevReviews.map((review) => {
@@ -4470,14 +4700,27 @@ export default function useBSideApp() {
           added: !hasLiked,
           albumTitle: review.albumTitle,
           reviewBackendId: review.backendId,
+          reviewOwnerId: review.userId,
+          reviewId: review.id,
+          previousReview: review,
         };
 
-        return {
+        return normalizeReview({
           ...review,
           likedBy: nextLikedBy,
-        };
+          interactionUpdatedAt,
+        });
       })
     );
+
+    if (likeState) {
+      logInteractionDebug('review_like:optimistic', {
+        reviewId: likeState.reviewId,
+        reviewBackendId: likeState.reviewBackendId,
+        userId: authSessionRef.current?.user?.id || '',
+        shouldLike: likeState.added,
+      });
+    }
 
     if (likeState?.added) {
       void triggerSuccessFeedback();
@@ -4489,31 +4732,50 @@ export default function useBSideApp() {
       });
     }
 
-    if (likeState?.reviewBackendId && authSession?.user?.id) {
+    const activeSession = authSessionRef.current;
+
+    if (likeState?.reviewBackendId && activeSession?.user?.id) {
       void toggleReviewLikeRecord({
         reviewBackendId: likeState.reviewBackendId,
-        userId: authSession.user.id,
-        shouldLike: Boolean(
-          targetReview && !targetReview.likedBy.includes(currentUserHandle)
-        ),
+        userId: activeSession.user.id,
+        shouldLike: Boolean(likeState.added),
       }).then((result) => {
         if (!result.ok && !result.skipped) {
+          logInteractionDebug('review_like:rollback', {
+            reviewId: likeState.reviewId,
+            reviewBackendId: likeState.reviewBackendId,
+            message: result.message,
+          });
+          setReviews((prevReviews) =>
+            prevReviews.map((review) =>
+              review.id === likeState.reviewId
+                ? normalizeReview(likeState.previousReview)
+                : review
+            )
+          );
           setAuthMessage(result.message);
           return;
         }
 
+        logInteractionDebug('review_like:persisted', {
+          reviewId: likeState.reviewId,
+          reviewBackendId: likeState.reviewBackendId,
+          userId: activeSession.user.id,
+          liked: likeState.added,
+        });
+
         if (
           result.ok &&
           likeState?.added &&
-          targetReview?.userId &&
-          targetReview.userId !== authSession.user.id
+          likeState.reviewOwnerId &&
+          likeState.reviewOwnerId !== activeSession.user.id
         ) {
           void createBackendNotification({
-            recipientId: targetReview.userId,
-            actorId: authSession.user.id,
+            recipientId: likeState.reviewOwnerId,
+            actorId: activeSession.user.id,
             type: 'social',
             title: `${currentUserHandle} le dio like a tu reseña`,
-            body: `"${targetReview.albumTitle}" acaba de sumar un nuevo like.`,
+            body: `"${likeState.albumTitle}" acaba de sumar un nuevo like.`,
             entityType: 'review',
             entityId: likeState.reviewBackendId,
           });
@@ -4529,6 +4791,7 @@ export default function useBSideApp() {
 
     let commentState = null;
     let optimisticCommentId = '';
+    const interactionUpdatedAt = new Date().toISOString();
 
     setReviews((prevReviews) =>
       prevReviews.map((review) => {
@@ -4546,14 +4809,25 @@ export default function useBSideApp() {
           albumTitle: review.albumTitle,
           reviewBackendId: review.backendId,
           reviewOwnerId: review.userId,
+          reviewId: review.id,
         };
 
-        return {
+        return normalizeReview({
           ...review,
           comments: [...review.comments, nextComment],
-        };
+          interactionUpdatedAt,
+        });
       })
     );
+
+    if (commentState) {
+      logInteractionDebug('review_comment:optimistic', {
+        reviewId: commentState.reviewId,
+        reviewBackendId: commentState.reviewBackendId,
+        userId: authSessionRef.current?.user?.id || '',
+        optimisticCommentId,
+      });
+    }
 
     if (commentState) {
       void triggerSuccessFeedback();
@@ -4565,14 +4839,35 @@ export default function useBSideApp() {
       });
     }
 
-    if (commentState?.reviewBackendId && authSession?.user?.id) {
+    const activeSession = authSessionRef.current;
+
+    if (commentState?.reviewBackendId && activeSession?.user?.id) {
       void createReviewCommentRecord({
         reviewBackendId: commentState.reviewBackendId,
-        userId: authSession.user.id,
+        userId: activeSession.user.id,
         text: trimmedComment,
         userHandle: currentUserHandle,
       }).then((result) => {
         if (!result.ok) {
+          logInteractionDebug('review_comment:rollback', {
+            reviewId: commentState.reviewId,
+            reviewBackendId: commentState.reviewBackendId,
+            optimisticCommentId,
+            message: result.message,
+          });
+          setReviews((prevReviews) =>
+            prevReviews.map((review) => {
+              if (review.id !== reviewId) return review;
+
+              return normalizeReview({
+                ...review,
+                comments: review.comments.filter(
+                  (comment) => comment.id !== optimisticCommentId
+                ),
+                interactionUpdatedAt: new Date().toISOString(),
+              });
+            })
+          );
           setAuthMessage(result.message);
           return;
         }
@@ -4581,26 +4876,33 @@ export default function useBSideApp() {
           return;
         }
 
+        logInteractionDebug('review_comment:persisted', {
+          reviewId: commentState.reviewId,
+          reviewBackendId: commentState.reviewBackendId,
+          commentBackendId: result.comment.backendId || result.comment.id,
+        });
+
         setReviews((prevReviews) =>
           prevReviews.map((review) => {
             if (review.id !== reviewId) return review;
 
-            return {
+            return normalizeReview({
               ...review,
               comments: review.comments.map((comment) =>
                 comment.id === optimisticCommentId ? result.comment : comment
               ),
-            };
+              interactionUpdatedAt: new Date().toISOString(),
+            });
           })
         );
 
         if (
           commentState?.reviewOwnerId &&
-          commentState.reviewOwnerId !== authSession.user.id
+          commentState.reviewOwnerId !== activeSession.user.id
         ) {
           void createBackendNotification({
             recipientId: commentState.reviewOwnerId,
-            actorId: authSession.user.id,
+            actorId: activeSession.user.id,
             type: 'social',
             title: `${currentUserHandle} comentó tu reseña`,
             body: `Tu reseña de "${commentState.albumTitle}" tiene una respuesta nueva.`,
@@ -5352,6 +5654,7 @@ export default function useBSideApp() {
     wishlistList,
     listeningHistory,
     listeningStreak,
+    dailyMusicSummary,
     recentListening,
     friendActivity,
     interestingUsers,

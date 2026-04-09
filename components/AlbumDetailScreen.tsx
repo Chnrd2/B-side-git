@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -29,6 +28,7 @@ import {
   getAlbumPlaybackTarget,
   getPlaybackState,
 } from '../lib/musicCatalog';
+import SafeArtwork from './SafeArtwork';
 
 const TrackRow = ({ track, index, onPlaySong }) => {
   const playbackState = getPlaybackState(track);
@@ -98,6 +98,7 @@ const AlbumDetailScreen = ({
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [tracks, setTracks] = useState([]);
   const [isLoadingTracks, setIsLoadingTracks] = useState(true);
+  const [tracksFeedback, setTracksFeedback] = useState('');
 
   const albumPlaybackTarget = useMemo(
     () => getAlbumPlaybackTarget(album, tracks),
@@ -116,6 +117,7 @@ const AlbumDetailScreen = ({
     setIsLoadingAudio(false);
     setIsLoadingTracks(true);
     setTracks([]);
+    setTracksFeedback('');
 
     fetchAlbumTracks(album, { signal: controller.signal })
       .then((nextTracks) => {
@@ -126,6 +128,9 @@ const AlbumDetailScreen = ({
       .catch((error) => {
         if (error?.name !== 'AbortError' && isMounted) {
           setTracks([]);
+          setTracksFeedback(
+            'No pudimos cargar la lista completa ahora mismo. Igual podés guardar o reseñar el lanzamiento.'
+          );
         }
       })
       .finally(() => {
@@ -233,13 +238,13 @@ const AlbumDetailScreen = ({
         </View>
 
         <View style={styles.coverContainer}>
-          {album.cover ? (
-            <Image source={{ uri: album.cover }} style={styles.coverImage} />
-          ) : (
-            <View style={styles.coverFallback}>
-              <Disc color="#E9D5FF" size={58} />
-            </View>
-          )}
+          <SafeArtwork
+            uri={album.cover}
+            style={styles.coverImage}
+            variant="album"
+            label="Sin portada"
+            showLabel={true}
+          />
         </View>
 
         <View style={styles.infoContainer}>
@@ -301,6 +306,11 @@ const AlbumDetailScreen = ({
           </Text>
 
           <Text style={styles.playHint}>{playbackSummary}</Text>
+          {tracksFeedback ? (
+            <View style={styles.inlineFeedbackCard}>
+              <Text style={styles.inlineFeedbackText}>{tracksFeedback}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.playbackStatsRow}>
             {playbackHighlights.map((highlight) => (
@@ -384,7 +394,7 @@ const AlbumDetailScreen = ({
             <View style={styles.sectionTitleGroup}>
               <Text style={styles.sectionTitle}>Canciones del álbum</Text>
               <Text style={styles.sectionSubtitle}>
-                Tocá un track para escuchar la muestra o abrirlo afuera si el catálogo no trae audio.
+                Tocá un track para escuchar la muestra o seguirlo afuera si el catálogo no trae audio.
               </Text>
             </View>
             {album.source ? (
@@ -534,6 +544,21 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
     maxWidth: 320,
+  },
+  inlineFeedbackCard: {
+    marginTop: 12,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(15,23,42,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,181,253,0.16)',
+  },
+  inlineFeedbackText: {
+    color: '#CBD5E1',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontSize: 12,
   },
   playbackStatsRow: {
     width: '100%',

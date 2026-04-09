@@ -47,10 +47,12 @@ function MainTabs({ app }) {
             currentTrack={app.currentTrack}
             friendActivity={app.friendActivity}
             listeningStreak={app.listeningStreak}
+            dailyMusicSummary={app.dailyMusicSummary}
             recentListening={app.recentListening}
             achievementSummary={app.achievementSummary}
             latestAchievementUnlock={app.latestAchievementUnlock}
             interestingAlbums={app.interestingAlbums}
+            currentPlan={app.currentUser.plan}
             hasUnreadMessages={app.hasUnreadMessages}
             hasUnreadNotifications={app.hasUnreadNotifications}
             onDeleteReview={app.deleteReview}
@@ -68,6 +70,7 @@ function MainTabs({ app }) {
             onOpenInbox={() => navigation.getParent()?.navigate('Inbox')}
             onOpenReviewWhileListening={app.openReviewWhileListening}
             onPlaySong={app.playTrack}
+            onOpenPlans={() => navigation.getParent()?.navigate('Plans')}
             onSelectAlbum={(album) =>
               navigation.getParent()?.navigate('AlbumDetail', { album })
             }
@@ -135,6 +138,7 @@ function MainTabs({ app }) {
             onShareProfile={app.openShareProfile}
             onOpenStory={app.openStoryCard}
             onOpenAccount={() => navigation.getParent()?.navigate('Account')}
+            onOpenPlans={() => navigation.getParent()?.navigate('Plans')}
             onOpenFoundation={() =>
               navigation.getParent()?.navigate('ProductFoundation')
             }
@@ -316,6 +320,7 @@ export default function AppNavigator({ app }) {
               onEditReview={app.openEditReview}
               onShareProfile={app.openShareProfile}
               onOpenStory={app.openStoryCard}
+              onOpenPlans={() => navigation.navigate('Plans')}
               onOpenFoundation={() => navigation.navigate('ProductFoundation')}
               onOpenPrivacy={() => navigation.navigate('PrivacyCenter')}
               onSaveProfile={app.saveProfile}

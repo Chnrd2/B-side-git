@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Animated,
-  Image,
   Modal,
   Platform,
   Share,
@@ -24,7 +23,12 @@ import {
 } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 import { Slider } from '@miblanchard/react-native-slider';
-import { triggerSelectionFeedback } from '../lib/feedback';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  triggerErrorFeedback,
+  triggerSelectionFeedback,
+} from '../lib/feedback';
+import SafeArtwork from './SafeArtwork';
 
 const Visualizer = ({ isPlaying }) => {
   const anim1 = useRef(new Animated.Value(0.2)).current;
@@ -80,15 +84,24 @@ const Visualizer = ({ isPlaying }) => {
   );
 };
 
+const formatTime = (millis = 0) => {
+  const safeMillis = Number(millis) || 0;
+  const minutes = Math.floor(safeMillis / 60000);
+  const seconds = Math.floor((safeMillis % 60000) / 1000);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
 const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [audioFeedback, setAudioFeedback] = useState('');
 
   const soundRef = useRef(null);
   const isDesktopWeb = Platform.OS === 'web';
+  const insets = useSafeAreaInsets();
 
   const shareCurrentTrack = useCallback(async () => {
     if (!currentTrack) {
@@ -103,7 +116,9 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
         }`,
       });
     } catch (error) {
-      console.warn('No pudimos compartir el track actual:', error);
+      if (__DEV__) {
+        console.warn('No pudimos compartir el track actual:', error);
+      }
     }
   }, [currentTrack]);
 
@@ -112,23 +127,42 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
       return;
     }
 
-    setPosition(status.positionMillis);
-    setDuration(status.durationMillis);
-    setIsPlaying(status.isPlaying);
+    setPosition(status.positionMillis || 0);
+    setDuration(status.durationMillis || 0);
+    setIsPlaying(Boolean(status.isPlaying));
 
     if (status.didJustFinish) {
       setIsPlaying(false);
     }
   };
 
-  const playSound = useCallback(async (url) => {
-    setIsLoading(true);
+  const unloadSound = useCallback(async () => {
+    if (!soundRef.current) {
+      return;
+    }
 
     try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+      await soundRef.current.unloadAsync();
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('No pudimos limpiar el audio anterior:', error);
       }
+    } finally {
+      soundRef.current = null;
+    }
+  }, []);
 
+  const playSound = useCallback(async (url) => {
+    if (!url) {
+      setAudioFeedback('No hay audio disponible para esta muestra.');
+      return;
+    }
+
+    setIsLoading(true);
+    setAudioFeedback('');
+
+    try {
+      await unloadSound();
       await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
 
       const { sound } = await Audio.Sound.createAsync(
@@ -140,13 +174,18 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
       sound.setOnPlaybackStatusUpdate(onPlaybackStatusUpdate);
       setIsPlaying(true);
     } catch (error) {
-      console.error('Error en audio:', error);
+      setAudioFeedback('No pudimos reproducir esta muestra ahora mismo.');
+      void triggerErrorFeedback();
+
+      if (__DEV__) {
+        console.error('Error en audio:', error);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [unloadSound]);
 
-  const togglePlayPause = async () => {
+  const togglePlayPause = useCallback(async () => {
     if (!soundRef.current) {
       return;
     }
@@ -157,26 +196,26 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
     }
 
     await soundRef.current.playAsync();
-  };
+  }, [isPlaying]);
 
-  const handleSeek = async (value) => {
+  const handleSeek = useCallback(async (value) => {
     if (!soundRef.current) {
       return;
     }
 
-    await soundRef.current.setPositionAsync(value);
-  };
+    await soundRef.current.setPositionAsync(Number(value) || 0);
+  }, []);
 
-  const handleJump = async (deltaMs) => {
+  const handleJump = useCallback(async (deltaMs) => {
     if (!soundRef.current || !duration) {
       return;
     }
 
     const nextPosition = Math.max(0, Math.min(duration, position + deltaMs));
     await handleSeek(nextPosition);
-  };
+  }, [duration, handleSeek, position]);
 
-  const handleRestart = async () => {
+  const handleRestart = useCallback(async () => {
     if (!soundRef.current) {
       return;
     }
@@ -186,37 +225,35 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
     if (!isPlaying) {
       await soundRef.current.playAsync();
     }
-  };
+  }, [handleSeek, isPlaying]);
 
   const closePlayer = useCallback(async () => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
-    }
-
+    await unloadSound();
     setIsExpanded(false);
     setIsPlaying(false);
     setPosition(0);
     setDuration(0);
+    setAudioFeedback('');
     onClose?.();
-  }, [onClose]);
+  }, [onClose, unloadSound]);
 
   useEffect(() => {
     if (currentTrack?.previewUrl) {
       void playSound(currentTrack.previewUrl);
+    } else {
+      setAudioFeedback('');
     }
 
     return () => {
-      if (soundRef.current) {
-        void soundRef.current.unloadAsync();
-      }
+      void unloadSound();
     };
-  }, [currentTrack, playSound]);
+  }, [currentTrack, playSound, unloadSound]);
 
   useEffect(() => {
     if (!currentTrack) {
       setIsExpanded(false);
       setIsPlaying(false);
+      setAudioFeedback('');
     }
   }, [currentTrack]);
 
@@ -224,31 +261,35 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
     return null;
   }
 
-  const formatTime = (millis) => {
-    const minutes = Math.floor(millis / 60000);
-    const seconds = ((millis % 60000) / 1000).toFixed(0);
-    return `${minutes}:${Number(seconds) < 10 ? '0' : ''}${seconds}`;
-  };
-
   return (
     <>
       {!isExpanded ? (
         <TouchableOpacity
-          style={styles.miniContainer}
+          style={[styles.miniContainer, { bottom: Math.max(insets.bottom + 72, 88) }]}
           onPress={() => {
             void triggerSelectionFeedback();
             setIsExpanded(true);
           }}
-          activeOpacity={0.92}>
-          <Image source={{ uri: currentTrack.cover }} style={styles.miniCover} />
+          activeOpacity={0.92}
+        >
+          <SafeArtwork
+            uri={currentTrack.cover}
+            style={styles.miniCover}
+            variant="track"
+          />
 
           <View style={styles.miniInfo}>
             <Text style={styles.miniTitle} numberOfLines={1}>
               {currentTrack.title}
             </Text>
             <Text style={styles.miniArtist} numberOfLines={1}>
-              {isLoading ? 'Cargando...' : currentTrack.artist}
+              {isLoading ? 'Cargando audio…' : currentTrack.artist}
             </Text>
+            {audioFeedback ? (
+              <Text style={styles.miniFeedback} numberOfLines={1}>
+                {audioFeedback}
+              </Text>
+            ) : null}
           </View>
 
           <TouchableOpacity
@@ -257,7 +298,9 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
               void triggerSelectionFeedback();
               void togglePlayPause();
             }}
-            style={styles.miniIconBtn}>
+            style={styles.miniIconBtn}
+            activeOpacity={0.82}
+          >
             {isLoading ? (
               <ActivityIndicator color="#8A2BE2" size="small" />
             ) : isPlaying ? (
@@ -273,7 +316,9 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
               void triggerSelectionFeedback();
               void closePlayer();
             }}
-            style={styles.miniIconBtn}>
+            style={styles.miniIconBtn}
+            activeOpacity={0.82}
+          >
             <X color="#94A3B8" size={18} />
           </TouchableOpacity>
         </TouchableOpacity>
@@ -281,23 +326,31 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
 
       <Modal visible={isExpanded} animationType="slide" transparent={false}>
         <View style={styles.fullContainer}>
-          <View style={styles.fullHeader}>
+          <View style={[styles.fullHeader, { paddingTop: Math.max(insets.top + 8, 24) }]}>
             <TouchableOpacity
               onPress={() => {
                 void triggerSelectionFeedback();
                 setIsExpanded(false);
-              }}>
+              }}
+              activeOpacity={0.82}
+            >
               <ChevronDown color="white" size={30} />
             </TouchableOpacity>
             <Text style={styles.fullHeaderText}>Reproduciendo</Text>
-            <TouchableOpacity onPress={() => void shareCurrentTrack()}>
+            <TouchableOpacity onPress={() => void shareCurrentTrack()} activeOpacity={0.82}>
               <Share2 color="white" size={22} />
             </TouchableOpacity>
           </View>
 
           <View style={styles.fullPanel}>
             <View style={styles.fullArtworkShell}>
-              <Image source={{ uri: currentTrack.cover }} style={styles.fullCover} />
+              <SafeArtwork
+                uri={currentTrack.cover}
+                style={styles.fullCover}
+                variant="track"
+                label="Sin portada"
+                showLabel={true}
+              />
             </View>
 
             <View style={styles.fullMeta}>
@@ -314,10 +367,18 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
                 void triggerSelectionFeedback();
                 onOpenReview?.();
                 setIsExpanded(false);
-              }}>
+              }}
+              activeOpacity={0.88}
+            >
               <Headphones color="#E9D5FF" size={18} />
-              <Text style={styles.reviewCtaText}>Reseñar ahora</Text>
+              <Text style={styles.reviewCtaText}>Reseñar mientras suena</Text>
             </TouchableOpacity>
+
+            {audioFeedback ? (
+              <View style={styles.audioFeedbackCard}>
+                <Text style={styles.audioFeedbackText}>{audioFeedback}</Text>
+              </View>
+            ) : null}
 
             <View style={styles.sliderContainer}>
               <Slider
@@ -327,7 +388,9 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
                 minimumTrackTintColor="#8A2BE2"
                 maximumTrackTintColor="#333"
                 thumbTintColor="#8A2BE2"
-                onSlidingComplete={(value) => handleSeek(value[0])}
+                onSlidingComplete={(value) =>
+                  handleSeek(Array.isArray(value) ? value[0] : value)
+                }
               />
 
               <View style={styles.timeContainer}>
@@ -337,24 +400,28 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
             </View>
 
             <View style={styles.controlsRow}>
-              <TouchableOpacity onPress={() => void handleRestart()}>
-                <Repeat color="#555" size={24} />
+              <TouchableOpacity onPress={() => void handleRestart()} activeOpacity={0.82}>
+                <Repeat color="#777" size={24} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => void handleJump(-10000)}>
+              <TouchableOpacity onPress={() => void handleJump(-10000)} activeOpacity={0.82}>
                 <SkipBack color="white" fill="white" size={32} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={togglePlayPause} style={styles.bigPlayBtn}>
+              <TouchableOpacity
+                onPress={() => void togglePlayPause()}
+                style={styles.bigPlayBtn}
+                activeOpacity={0.88}
+              >
                 {isPlaying ? (
                   <Pause color="black" fill="black" size={35} />
                 ) : (
                   <Play color="black" fill="black" size={35} />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => void handleJump(10000)}>
+              <TouchableOpacity onPress={() => void handleJump(10000)} activeOpacity={0.82}>
                 <SkipForward color="white" fill="white" size={32} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => void closePlayer()}>
-                <X color="#555" size={24} />
+              <TouchableOpacity onPress={() => void closePlayer()} activeOpacity={0.82}>
+                <X color="#777" size={24} />
               </TouchableOpacity>
             </View>
           </View>
@@ -367,7 +434,6 @@ const MiniPlayer = ({ currentTrack, onClose, onOpenReview }) => {
 const styles = StyleSheet.create({
   miniContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 100 : 80,
     left: 15,
     right: 15,
     backgroundColor: '#111',
@@ -398,6 +464,11 @@ const styles = StyleSheet.create({
     color: '#8A2BE2',
     fontSize: 12,
   },
+  miniFeedback: {
+    color: '#FCA5A5',
+    fontSize: 11,
+    marginTop: 4,
+  },
   miniIconBtn: {
     width: 38,
     height: 38,
@@ -410,45 +481,42 @@ const styles = StyleSheet.create({
   fullContainer: {
     flex: 1,
     backgroundColor: '#000',
-    padding: 30,
+    paddingHorizontal: Platform.OS === 'web' ? 32 : 24,
   },
   fullHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 20,
+    paddingBottom: 16,
   },
   fullHeaderText: {
     color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.4,
   },
   fullPanel: {
-    width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-    paddingTop: 28,
-    paddingBottom: 20,
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: 24,
   },
   fullArtworkShell: {
-    width: '100%',
     alignItems: 'center',
   },
   fullCover: {
     width: '100%',
-    maxWidth: 420,
     aspectRatio: 1,
-    borderRadius: 24,
-    backgroundColor: '#0F172A',
+    borderRadius: 28,
+    maxWidth: 360,
+    alignSelf: 'center',
   },
   fullMeta: {
     marginTop: 28,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 16,
   },
   fullMetaCopy: {
     flex: 1,
@@ -482,6 +550,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
   },
+  audioFeedbackCard: {
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.18)',
+    backgroundColor: 'rgba(69,10,10,0.26)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  audioFeedbackText: {
+    color: '#FECACA',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontSize: 12,
+  },
   vizContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -500,23 +583,22 @@ const styles = StyleSheet.create({
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
   },
   timeText: {
-    color: '#666',
+    color: '#888',
     fontSize: 12,
   },
   controlsRow: {
+    marginTop: 28,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 34,
   },
   bigPlayBtn: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     backgroundColor: 'white',
-    width: 75,
-    height: 75,
-    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },

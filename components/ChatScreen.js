@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -19,6 +18,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { triggerSelectionFeedback } from '../lib/feedback';
+import SafeArtwork from './SafeArtwork';
 
 const rgbaFromHex = (hex, alpha = 1) => {
   const safeHex = `${hex || '#000000'}`.replace('#', '');
@@ -103,7 +103,7 @@ const ChatScreen = ({
   const renderMessage = ({ item }) => {
     const isMe = item.sender === 'me';
     const hasReaction = reactions[item.id];
-    const isRecommendation = item.messageType === 'recommendation';
+        const isRecommendation = item.messageType === 'recommendation';
 
     const albumPayload =
       item.albumTitle || item.albumArtist || item.albumCover
@@ -133,9 +133,14 @@ const ChatScreen = ({
             </View>
           ) : null}
 
-          {item.albumCover ? (
+          {(item.albumCover || item.albumTitle) ? (
             <View style={styles.sharedAlbumContainer}>
-              <Image source={{ uri: item.albumCover }} style={styles.sharedAlbumCover} />
+              <SafeArtwork
+                uri={item.albumCover}
+                style={styles.sharedAlbumCover}
+                variant="album"
+                label="Sin portada"
+              />
               <View style={styles.sharedAlbumInfo}>
                 <Text style={styles.sharedAlbumTitle} numberOfLines={1}>
                   {item.albumTitle}
@@ -205,7 +210,11 @@ const ChatScreen = ({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <View style={styles.avatar}>
               {chat.user.avatarUrl ? (
-                <Image source={{ uri: chat.user.avatarUrl }} style={styles.avatarImage} />
+                <SafeArtwork
+                  uri={chat.user.avatarUrl}
+                  style={styles.avatarImage}
+                  variant="user"
+                />
               ) : (
                 <Text style={styles.avatarText}>{chat.user.name.charAt(0)}</Text>
               )}

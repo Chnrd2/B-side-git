@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import {
   Bell,
   ChevronLeft,
@@ -24,25 +18,26 @@ const ICONS_BY_TYPE = {
 };
 
 const NotificationsCenterScreen = ({
-  notifications,
+  notifications = [],
   onBack,
   onMarkAllRead,
   onDismiss,
 }) => {
-  const hasUnreadNotifications = notifications.some(
-    (notification) => !notification.read
-  );
+  const hasUnreadNotifications = notifications.some((notification) => !notification.read);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton} activeOpacity={0.82}>
           <ChevronLeft color="white" size={24} />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Notificaciones</Text>
+
         <TouchableOpacity
           onPress={onMarkAllRead}
-          disabled={!hasUnreadNotifications}>
+          disabled={!hasUnreadNotifications}
+          activeOpacity={0.82}>
           <Text
             style={[
               styles.markAllText,
@@ -82,20 +77,17 @@ const NotificationsCenterScreen = ({
 
                   <View style={styles.notificationBody}>
                     <View style={styles.notificationHeader}>
-                      <Text style={styles.notificationTitle}>
-                        {notification.title}
-                      </Text>
+                      <Text style={styles.notificationTitle}>{notification.title}</Text>
                       {!notification.read ? <View style={styles.unreadDot} /> : null}
                     </View>
                     <Text style={styles.notificationText}>{notification.body}</Text>
-                    <Text style={styles.notificationTime}>
-                      {notification.timeLabel}
-                    </Text>
+                    <Text style={styles.notificationTime}>{notification.timeLabel}</Text>
                   </View>
 
                   <TouchableOpacity
                     onPress={() => onDismiss(notification.id)}
-                    style={styles.dismissButton}>
+                    style={styles.dismissButton}
+                    activeOpacity={0.76}>
                     <Trash2 color="#9CA3AF" size={16} />
                   </TouchableOpacity>
                 </View>

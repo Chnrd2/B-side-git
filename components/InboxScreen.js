@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Platform,
-  Image,
 } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
+import SafeArtwork from './SafeArtwork';
 
 const InboxScreen = ({ chats, onClose, onOpenChat }) => {
   const orderedChats = [...chats].sort((left, right) => {
@@ -67,7 +67,11 @@ const InboxScreen = ({ chats, onClose, onOpenChat }) => {
               onPress={() => onOpenChat(item)}>
               <View style={styles.avatar}>
                 {item.user.avatarUrl ? (
-                  <Image source={{ uri: item.user.avatarUrl }} style={styles.avatarImage} />
+                  <SafeArtwork
+                    uri={item.user.avatarUrl}
+                    style={styles.avatarImage}
+                    variant="user"
+                  />
                 ) : (
                   <Text style={styles.avatarText}>{item.user.name.charAt(0)}</Text>
                 )}

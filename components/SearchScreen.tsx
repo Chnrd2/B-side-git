@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -14,13 +13,14 @@ import {
 } from 'react-native';
 import {
   ChevronDown,
-  Disc,
   Headphones,
   Radio,
   Search as SearchIcon,
   Sparkles,
 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { triggerSelectionFeedback } from '../lib/feedback';
+import SafeArtwork from './SafeArtwork';
 
 import {
   getPlaybackState,
@@ -31,20 +31,38 @@ import {
 
 const GENRES = ['Rock', 'Pop', 'Hip Hop', 'Electrónica', 'Jazz', 'Indie'];
 
-const DiscoveryAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
+const formatRecommendationReason = (reason = '') => {
+  if (!reason) {
+    return 'Porque tu perfil viene pidiendo algo nuevo.';
+  }
+
+  const normalized = reason.trim();
+  if (!normalized) {
+    return 'Porque tu perfil viene pidiendo algo nuevo.';
+  }
+
+  const lower = normalized.toLowerCase();
+  if (lower.startsWith('porque')) {
+    return normalized;
+  }
+
+  return `Porque ${lower.charAt(0)}${lower.slice(1)}`;
+};
+
+const DiscoveryAlbumCard = React.memo(({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
   const playbackState = getPlaybackState(album);
 
   return (
     <TouchableOpacity
       style={[styles.discoveryCard, { width: cardWidth }]}
       onPress={() => onSelectAlbum(album)}>
-      {album.cover ? (
-        <Image source={{ uri: album.cover }} style={styles.discoveryCover} />
-      ) : (
-        <View style={styles.discoveryPlaceholder}>
-          <Disc color="#A855F7" size={18} />
-        </View>
-      )}
+      <SafeArtwork
+        uri={album.cover}
+        style={styles.discoveryCover}
+        variant="album"
+        label="Sin portada"
+        showLabel={true}
+      />
 
       <Text style={styles.discoveryTitle} numberOfLines={1}>
         {album.title}
@@ -53,25 +71,28 @@ const DiscoveryAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => 
         {album.artist}
       </Text>
       <Text style={styles.discoveryReason} numberOfLines={2}>
-        {album.reason}
+        {formatRecommendationReason(album.reason)}
       </Text>
       <Text style={styles.discoveryPlaybackHint}>{playbackState.badge}</Text>
 
       {playbackState.canInteract ? (
         <TouchableOpacity
           style={styles.discoveryButton}
-          onPress={() => onPlaySong?.(album)}>
+          onPress={() => {
+            void triggerSelectionFeedback();
+            onPlaySong?.(album);
+          }}>
           <Headphones color="white" size={14} />
           <Text style={styles.discoveryButtonText}>
-            {playbackState.mode === 'preview' ? 'Escuchar muestra' : 'Abrir'}
+            {playbackState.actionLabel}
           </Text>
         </TouchableOpacity>
       ) : null}
     </TouchableOpacity>
   );
-};
+});
 
-const DiscoveryArtistCard = ({ artist, onOpenArtist, cardWidth }) => (
+const DiscoveryArtistCard = React.memo(({ artist, onOpenArtist, cardWidth }) => (
   <TouchableOpacity
     style={[styles.artistDiscoveryCard, { width: cardWidth }]}
     activeOpacity={0.9}
@@ -90,12 +111,12 @@ const DiscoveryArtistCard = ({ artist, onOpenArtist, cardWidth }) => (
       {artist.name}
     </Text>
     <Text style={styles.artistDiscoveryReason} numberOfLines={2}>
-      {artist.reason}
+      {formatRecommendationReason(artist.reason)}
     </Text>
   </TouchableOpacity>
-);
+));
 
-const OracleAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
+const OracleAlbumCard = React.memo(({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
   const playbackState = getPlaybackState(album);
 
   return (
@@ -104,13 +125,13 @@ const OracleAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
       activeOpacity={0.92}
       onPress={() => onSelectAlbum(album)}>
       <View style={styles.oracleResultArtworkWrap}>
-        {album.cover ? (
-          <Image source={{ uri: album.cover }} style={styles.oracleResultArtwork} />
-        ) : (
-          <View style={styles.oracleResultPlaceholder}>
-            <Disc color="#E9D5FF" size={18} />
-          </View>
-        )}
+        <SafeArtwork
+          uri={album.cover}
+          style={styles.oracleResultArtwork}
+          variant="album"
+          label="Sin portada"
+          showLabel={true}
+        />
       </View>
 
       <Text style={styles.oracleResultTitle} numberOfLines={1}>
@@ -120,22 +141,25 @@ const OracleAlbumCard = ({ album, onSelectAlbum, onPlaySong, cardWidth }) => {
         {album.artist}
       </Text>
       <Text style={styles.oracleResultReason} numberOfLines={3}>
-        {album.reason}
+        {formatRecommendationReason(album.reason)}
       </Text>
 
       {playbackState.canInteract ? (
         <TouchableOpacity
           style={styles.oracleResultButton}
-          onPress={() => onPlaySong?.(album)}>
+          onPress={() => {
+            void triggerSelectionFeedback();
+            onPlaySong?.(album);
+          }}>
           <Headphones color="white" size={14} />
           <Text style={styles.oracleResultButtonText}>
-            {playbackState.mode === 'preview' ? 'Escuchar muestra' : 'Abrir'}
+            {playbackState.actionLabel}
           </Text>
         </TouchableOpacity>
       ) : null}
     </TouchableOpacity>
   );
-};
+});
 
 const SearchScreen = ({
   interestingAlbums = [],
@@ -153,12 +177,14 @@ const SearchScreen = ({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchMessage, setSearchMessage] = useState(null);
   const [catalogSource, setCatalogSource] = useState(getMusicCatalogProvider());
   const [hasSearched, setHasSearched] = useState(false);
 
   const requestIdRef = useRef(0);
   const abortControllerRef = useRef(null);
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   const spotifyCatalogReady = isSpotifyCatalogConfigured();
   const trimmedQuery = query.trim();
@@ -178,17 +204,17 @@ const SearchScreen = ({
   const oracleCardWidth = width < 420 ? Math.min(218, width * 0.6) : 226;
 
   const oracleStatusText = useMemo(() => {
-    if (oracleSource === 'remote') return 'Afinado con B-Side Lab';
-    if (oracleSource === 'fallback') return 'Tanda de rescate';
-    if (oracleSource === 'shuffle') return 'Otra vuelta sobre tu perfil';
-    return 'Afinado con tu perfil actual';
+    if (oracleSource === 'remote') return 'Curado por B-Side Lab';
+    if (oracleSource === 'fallback') return 'Una salida del loop';
+    if (oracleSource === 'shuffle') return 'Otra vuelta para tu perfil';
+    return 'Leído desde tu gusto';
   }, [oracleSource]);
 
   const oracleHelperText =
     oracleMessage ||
     (trimmedQuery.length >= 2
-      ? `Podemos usar "${trimmedQuery}" como pista extra para afinar la tanda.`
-      : 'Pedí otra tanda cuando quieras salir del loop sin perder tu identidad musical.');
+      ? `Tomamos "${trimmedQuery}" como pista para afinar mejor la tanda.`
+      : 'Pedí otra tanda cuando quieras romper la rutina sin perder tu eje.');
 
   const searchMusic = async (term) => {
     if (term.length < 2) {
@@ -198,6 +224,7 @@ const SearchScreen = ({
       setCatalogSource(getMusicCatalogProvider());
       setHasSearched(false);
       setLoading(false);
+      setSearchMessage(null);
       return;
     }
 
@@ -206,6 +233,7 @@ const SearchScreen = ({
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
     setLoading(true);
+    setSearchMessage(null);
 
     try {
       const response = await searchMusicCatalog(term, {
@@ -228,9 +256,14 @@ const SearchScreen = ({
       if (currentRequestId === requestIdRef.current) {
         setResults([]);
         setHasSearched(true);
+        setSearchMessage(
+          'No pudimos hablar con el catálogo ahora mismo. Probá de nuevo en un rato.'
+        );
       }
 
-      console.error('Error buscando música:', error);
+      if (__DEV__) {
+        console.error('Error buscando música:', error);
+      }
     } finally {
       if (currentRequestId === requestIdRef.current) {
         setLoading(false);
@@ -246,6 +279,7 @@ const SearchScreen = ({
       setCatalogSource(getMusicCatalogProvider());
       setHasSearched(false);
       setLoading(false);
+      setSearchMessage(null);
       return undefined;
     }
 
@@ -269,7 +303,7 @@ const SearchScreen = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top + 18, 56) }]}>
       <Text style={styles.headerTitle}>Buscar</Text>
 
       <View style={styles.searchBarContainer}>
@@ -292,7 +326,7 @@ const SearchScreen = ({
         keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: bottomSpacer },
+          { paddingBottom: bottomSpacer + Math.max(insets.bottom, 14) },
         ]}>
         <View style={styles.catalogCard}>
           <Text style={styles.catalogHintEyebrow}>FUENTE</Text>
@@ -305,11 +339,11 @@ const SearchScreen = ({
             {!hasSearched
               ? spotifyCatalogReady
                 ? 'Buscá artistas, discos y canciones desde tu fuente principal.'
-                : 'Buscá artistas, discos y canciones desde el catálogo disponible.'
+                : 'Buscá artistas, discos y canciones desde lo que hoy está disponible.'
               : catalogSource === 'spotify'
                 ? 'Resultados encontrados en Spotify.'
                 : spotifyCatalogReady
-                  ? 'Estos resultados llegaron por una fuente alternativa.'
+                  ? 'Estos resultados llegaron por una ruta alternativa.'
                   : 'Resultados encontrados en iTunes.'}
           </Text>
         </View>
@@ -328,15 +362,15 @@ const SearchScreen = ({
               <Text style={styles.oracleEyebrow}>ORÁCULO B-SIDE</Text>
               <Text style={styles.oracleTitle}>
                 {showExpandedOracle
-                  ? 'Tres discos para destrabarte'
-                  : 'Tanda afinada para tu perfil'}
+                  ? 'Tres discos para sacarte del loop'
+                  : 'Una tanda a tu medida'}
               </Text>
               <Text style={styles.oracleText}>
                 {showExpandedOracle
-                  ? 'Cruza tu Top 5, tus reseñas y tus escuchas para acercarte a algo nuevo sin perder tu identidad musical.'
+                  ? 'Cruza tu Top 5, tus reseñas y tus escuchas para empujarte algo nuevo sin irse de tu mapa.'
                   : isSearching
-                    ? 'Buscá tranquilo: el Oráculo se resume para no taparte los resultados.'
-                    : 'Pedí una nueva tanda cuando quieras abrir el radar sin perder tu eje.'}
+                    ? 'Buscá tranquilo: el Oráculo se corre para dejarte ver lo importante.'
+                    : 'Pedí una tanda nueva cuando quieras encontrar algo con intención.'}
               </Text>
             </View>
 
@@ -360,7 +394,7 @@ const SearchScreen = ({
                   <>
                     <Sparkles color="white" size={16} />
                     <Text style={styles.oracleButtonText}>
-                      {oracleRecommendations.length ? 'Otra tanda' : 'Preguntarle'}
+                      {oracleRecommendations.length ? 'Dame otra' : 'Quiero una'}
                     </Text>
                   </>
                 )}
@@ -405,11 +439,9 @@ const SearchScreen = ({
             {interestingAlbums.length ? (
               <View style={styles.discoverySection}>
                 <Text style={styles.discoveryEyebrow}>DESCUBRIR</Text>
-                <Text style={styles.discoverySectionTitle}>
-                  Álbumes para vos
-                </Text>
+                <Text style={styles.discoverySectionTitle}>Seguí este camino</Text>
                 <Text style={styles.discoverySectionText}>
-                  Se apoyan en tus reseñas, tus listas, tus escuchas y lo que se mueve en la comunidad.
+                  Aparecen porque tu gusto ya dejó pistas bastante claras.
                 </Text>
 
                 <ScrollView
@@ -433,11 +465,9 @@ const SearchScreen = ({
             {interestingArtists.length ? (
               <View style={styles.discoverySection}>
                 <Text style={styles.discoveryEyebrow}>ARTISTAS PARA VOS</Text>
-                <Text style={styles.discoverySectionTitle}>
-                  Gente y sonidos para seguir explorando
-                </Text>
+                <Text style={styles.discoverySectionTitle}>Artistas para seguir de cerca</Text>
                 <Text style={styles.discoverySectionText}>
-                  Se apoyan en tus reseñas, tus listas y lo que más se acerca a tu gusto.
+                  Se apoyan en lo que venís guardando, reseñando y repitiendo.
                 </Text>
 
                 <ScrollView
@@ -463,7 +493,7 @@ const SearchScreen = ({
                   El radar todavía se está armando
                 </Text>
                 <Text style={styles.discoveryEmptyText}>
-                  Sumá más reseñas, listas o escuchas para que B-Side te devuelva recomendaciones más afinadas.
+                  Sumá más reseñas, listas o escuchas para que B-Side te devuelva hallazgos con más puntería.
                 </Text>
               </View>
             ) : null}
@@ -471,12 +501,18 @@ const SearchScreen = ({
             <Text style={styles.sectionTitle}>Explorar géneros</Text>
             <View style={styles.genreGrid}>
               {GENRES.map((genre) => (
-                <TouchableOpacity
+                <Pressable
                   key={genre}
-                  style={styles.genreCard}
-                  onPress={() => setQuery(genre)}>
+                  style={({ pressed }) => [
+                    styles.genreCard,
+                    pressed && styles.genreCardPressed,
+                  ]}
+                  onPress={() => {
+                    void triggerSelectionFeedback();
+                    setQuery(genre);
+                  }}>
                   <Text style={styles.genreText}>{genre}</Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
           </>
@@ -484,8 +520,11 @@ const SearchScreen = ({
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No encontramos resultados</Text>
             <Text style={styles.emptyText}>
-              Probá con otro nombre de disco, artista o género.
+              Probá con otro disco, artista o género.
             </Text>
+            {searchMessage ? (
+              <Text style={styles.emptyHelper}>{searchMessage}</Text>
+            ) : null}
             {!spotifyCatalogReady ? (
               <Text style={styles.emptyHelper}>
                 Si buscabas algo más de nicho o nuevo, probablemente falte activar Spotify en el catálogo.
@@ -502,13 +541,12 @@ const SearchScreen = ({
                   key={item.id}
                   style={styles.resultItem}
                   onPress={() => onSelectAlbum(item)}>
-                  {item.cover ? (
-                    <Image source={{ uri: item.cover }} style={styles.albumCover} />
-                  ) : (
-                    <View style={[styles.albumCover, styles.resultCoverFallback]}>
-                      <Disc color="#A855F7" size={18} />
-                    </View>
-                  )}
+                  <SafeArtwork
+                    uri={item.cover}
+                    style={styles.albumCover}
+                    variant="album"
+                    label="Sin portada"
+                  />
                   <View style={styles.infoContainer}>
                     <Text style={styles.albumTitle} numberOfLines={1}>
                       {item.title}
@@ -939,6 +977,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 12,
+  },
+  genreCardPressed: {
+    transform: [{ scale: 0.98 }],
+    backgroundColor: 'rgba(88, 28, 135, 0.92)',
   },
   genreText: {
     color: '#E9D5FF',
