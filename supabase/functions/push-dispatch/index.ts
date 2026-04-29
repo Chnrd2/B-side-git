@@ -27,10 +27,17 @@ Deno.serve(async (request) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const internalSecret = Deno.env.get('PUSH_DISPATCH_SECRET') || '';
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceRoleKey || !internalSecret) {
       return jsonResponse(503, {
-        error: 'Falta SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY para despachar push.',
+        error: 'Falta configurar el despacho interno de push.',
+      });
+    }
+
+    if (request.headers.get('x-bside-function-secret') !== internalSecret) {
+      return jsonResponse(401, {
+        error: 'No autorizado.',
       });
     }
 

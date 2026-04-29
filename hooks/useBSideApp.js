@@ -3756,11 +3756,31 @@ export default function useBSideApp() {
     );
 
     if (supabaseStatus.isConfigured && authSession?.user?.id) {
-      void createListeningEventRecord(authSession.user.id, nextListeningEntry).then(
+      const listeningUserId = authSession.user.id;
+
+      void createListeningEventRecord(listeningUserId, nextListeningEntry).then(
         (result) => {
-          if (!result.ok && !result.skipped) {
-            setAuthMessage(result.message);
+          if (result.ok || result.skipped) {
+            logProductDebug('listening-event', 'synced', {
+              userId: listeningUserId,
+              albumId: nextListeningEntry.albumId,
+            });
+            return;
           }
+
+          logProductDebug('listening-event', 'backend-failed', {
+            userId: listeningUserId,
+            albumId: nextListeningEntry.albumId,
+            message: result.message,
+          });
+          setAuthMessage(result.message);
+          pushNotification({
+            type: 'product',
+            title: 'Escucha guardada acá',
+            body:
+              'La anotamos en este dispositivo. Vamos a intentar sincronizarla cuando la conexión mejore.',
+            read: true,
+          });
         }
       );
     }

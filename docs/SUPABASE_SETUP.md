@@ -111,11 +111,16 @@ Referencia interna:
 
 ## 7. Funciones que hay que desplegar
 
-Si querés usar borrado real de cuenta, además del schema tenés que desplegar:
+Para beta real conviene desplegar estas funciones:
 
+- [supabase/functions/notify-create/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/notify-create/index.ts)
 - [supabase/functions/delete-account/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/delete-account/index.ts)
+- [supabase/functions/spotify-search/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/spotify-search/index.ts)
+- [supabase/functions/music-oracle/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/music-oracle/index.ts)
 
-Esa función necesita este secret en Supabase:
+`notify-create` es el camino seguro para crear notificaciones sociales. El cliente ya no puede insertar directamente en `public.notifications`.
+
+`delete-account`, `notify-create` y las funciones que usen datos privilegiados necesitan este secret en Supabase:
 
 ```bash
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key

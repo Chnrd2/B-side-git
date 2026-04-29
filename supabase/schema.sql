@@ -432,13 +432,9 @@ using (auth.uid() = recipient_id)
 with check (auth.uid() = recipient_id);
 
 drop policy if exists "Users create notifications as actor" on public.notifications;
-create policy "Users create notifications as actor"
-on public.notifications
-for insert
-with check (
-  auth.uid() = actor_id
-  and recipient_id <> auth.uid()
-);
+-- Notification inserts are intentionally restricted to trusted Edge Functions.
+-- Clients can read/update their own notifications, but creation goes through
+-- notify-create so event type, actor and rate limits stay enforceable.
 
 drop policy if exists "Users read own push devices" on public.push_devices;
 create policy "Users read own push devices"
