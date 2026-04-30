@@ -21,6 +21,7 @@ import {
   Sparkles,
   UserRound,
 } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const ACCESS_MODES = [
   {
@@ -643,35 +644,41 @@ const OnboardingScreen = ({
   );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardShell}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.glow} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardShell}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.glow} />
 
-        <View style={styles.header}>
-          <View style={styles.badge}>
-            <Disc3 color="#E9D5FF" size={18} />
-            <Text style={styles.badgeText}>B-SIDE</Text>
+          <View style={styles.header}>
+            <View style={styles.badge}>
+              <Disc3 color="#E9D5FF" size={18} />
+              <Text style={styles.badgeText}>B-SIDE</Text>
+            </View>
+            <Text style={styles.title}>Descubrí, guardá y compartí música a tu manera</Text>
+            <Text style={styles.subtitle}>
+              Encontrá discos, armá tus listas, dejá reseñas y conectá con gente que
+              vibra con la música como vos.
+            </Text>
           </View>
-          <Text style={styles.title}>Descubrí, guardá y compartí música a tu manera</Text>
-          <Text style={styles.subtitle}>
-            Encontrá discos, armá tus listas, dejá reseñas y conectá con gente que
-            vibra con la música como vos.
-          </Text>
-        </View>
 
-        {step === 'intro' ? renderIntro() : renderAccess()}
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {step === 'intro' ? renderIntro() : renderAccess()}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#050816',
+  },
   keyboardShell: {
     flex: 1,
     backgroundColor: '#050816',
@@ -682,7 +689,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 24,
-    paddingTop: 70,
+    paddingTop: 24,
     paddingBottom: 44,
     gap: 26,
   },
