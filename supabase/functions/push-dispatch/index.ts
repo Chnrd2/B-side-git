@@ -12,6 +12,9 @@ const jsonResponse = (status: number, payload: unknown) =>
     },
   });
 
+const trimText = (value: unknown, maxLength: number) =>
+  `${value || ''}`.trim().slice(0, maxLength);
+
 type PushDispatchBody = {
   recipientId?: string;
   title?: string;
@@ -42,11 +45,17 @@ Deno.serve(async (request) => {
     }
 
     const body = (await request.json()) as PushDispatchBody;
-    const recipientId = `${body?.recipientId || ''}`.trim();
-    const title = `${body?.title || ''}`.trim();
-    const messageBody = `${body?.body || ''}`.trim();
+    const recipientId = trimText(body?.recipientId, 80);
+    const title = trimText(body?.title, 120);
+    const messageBody = trimText(body?.body, 240);
     const data =
       body?.data && typeof body.data === 'object' ? body.data : {};
+
+    if (JSON.stringify(data).length > 2000) {
+      return jsonResponse(400, {
+        error: 'Los datos de la notificación son demasiado grandes.',
+      });
+    }
 
     if (!recipientId || !title || !messageBody) {
       return jsonResponse(400, {
@@ -115,8 +124,10 @@ Deno.serve(async (request) => {
       expo: expoPayload,
     });
   } catch (error) {
+    console.error('[push-dispatch] unexpected failure', error);
+
     return jsonResponse(500, {
-      error: error instanceof Error ? error.message : 'Push dispatch falló.',
+      error: 'No pudimos enviar la notificación push. Probá de nuevo en un momento.',
     });
   }
 });

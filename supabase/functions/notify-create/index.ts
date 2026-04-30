@@ -213,11 +213,10 @@ Deno.serve(async (request) => {
       push,
     });
   } catch (error) {
+    console.error('[notify-create] unexpected failure', error);
+
     return jsonResponse(500, {
-      error:
-        error instanceof Error
-          ? error.message
-          : 'No pudimos crear la notificación.',
+      error: 'No pudimos crear la notificación. Probá de nuevo en un momento.',
     });
   }
 });

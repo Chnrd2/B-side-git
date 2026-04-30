@@ -37,6 +37,14 @@
 - En Android real con dev build, confirmar que el token se registre en `push_devices`.
 - Enviar una notificación de prueba y validar banner/centro de notificaciones.
 
+## Seguridad básica
+
+- Confirmar que `public.notifications` no permita inserts desde cliente.
+- Crear una notificación válida vía `notify-create`.
+- Intentar mandar `actorId` distinto al usuario autenticado y confirmar que falla.
+- Intentar spamear notificaciones, comentarios, likes y mensajes y confirmar que aparece rate limit.
+- Confirmar que `push-dispatch` solo responde si recibe `PUSH_DISPATCH_SECRET`.
+
 ## Playback y discovery
 
 - Buscar un álbum con preview y otro sin preview.

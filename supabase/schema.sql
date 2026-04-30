@@ -169,6 +169,13 @@ create table if not exists public.push_devices (
   updated_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.action_rate_limits (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  action_type text not null,
+  created_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists reviews_user_id_idx on public.reviews (user_id);
 create index if not exists review_comments_review_id_idx on public.review_comments (review_id);
 create index if not exists lists_user_id_idx on public.lists (user_id);
@@ -178,6 +185,208 @@ create index if not exists reports_status_idx on public.reports (status, created
 create index if not exists listening_events_user_id_idx on public.listening_events (user_id, created_at desc);
 create index if not exists notifications_recipient_id_idx on public.notifications (recipient_id, created_at desc);
 create index if not exists push_devices_user_id_idx on public.push_devices (user_id, is_active, last_seen_at desc);
+create index if not exists action_rate_limits_user_action_idx on public.action_rate_limits (user_id, action_type, created_at desc);
+
+create or replace function public.enforce_action_rate_limit(
+  action_user_id uuid,
+  action_key text,
+  max_actions integer,
+  window_seconds integer
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  window_start timestamptz;
+  actions_count integer;
+  normalized_action_key text;
+begin
+  if auth.uid() is null or action_user_id is null or auth.uid() <> action_user_id then
+    raise exception 'Acción no permitida para esta cuenta.' using errcode = '42501';
+  end if;
+
+  normalized_action_key := btrim(coalesce(action_key, ''));
+
+  if length(normalized_action_key) = 0 then
+    raise exception 'Acción inválida.' using errcode = '22023';
+  end if;
+
+  window_start := timezone('utc', now()) - make_interval(secs => greatest(window_seconds, 1));
+
+  delete from public.action_rate_limits
+  where created_at < timezone('utc', now()) - interval '1 day';
+
+  select count(*)
+  into actions_count
+  from public.action_rate_limits as arl
+  where arl.user_id = action_user_id
+    and arl.action_type = normalized_action_key
+    and arl.created_at >= window_start;
+
+  if actions_count >= max_actions then
+    raise exception 'Demasiadas acciones seguidas. Esperá un momento y volvé a intentar.' using errcode = 'P0001';
+  end if;
+
+  insert into public.action_rate_limits (user_id, action_type)
+  values (action_user_id, normalized_action_key);
+end;
+$$;
+
+create or replace function public.validate_profile_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.handle := lower(regexp_replace(btrim(coalesce(new.handle, '')), '^@+', ''));
+  new.display_name := left(btrim(coalesce(new.display_name, '')), 60);
+  new.bio := left(btrim(coalesce(new.bio, '')), 180);
+  new.avatar_url := left(btrim(coalesce(new.avatar_url, '')), 600);
+  new.wallpaper_url := left(btrim(coalesce(new.wallpaper_url, '')), 600);
+  new.avatar_moderation_status := left(btrim(coalesce(new.avatar_moderation_status, 'approved')), 40);
+  new.wallpaper_moderation_status := left(btrim(coalesce(new.wallpaper_moderation_status, 'approved')), 40);
+  new.theme_preset := left(btrim(coalesce(new.theme_preset, 'vinyl-night')), 40);
+
+  if new.handle !~ '^[a-z0-9_\.]{3,24}$' then
+    raise exception 'Elegí un @ de 3 a 24 caracteres con letras, números, punto o guion bajo.' using errcode = '22023';
+  end if;
+
+  if length(new.display_name) = 0 then
+    new.display_name := new.handle;
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.validate_review_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.user_id, 'review:create', 8, 60);
+  new.album_id := left(btrim(coalesce(new.album_id, '')), 160);
+  new.album_title := left(btrim(coalesce(new.album_title, '')), 160);
+  new.album_artist := left(btrim(coalesce(new.album_artist, '')), 160);
+  new.cover_url := left(btrim(coalesce(new.cover_url, '')), 600);
+  new.body := btrim(coalesce(new.body, ''));
+
+  if length(new.album_id) = 0 or length(new.album_title) = 0 then
+    raise exception 'Faltan datos del disco para publicar la reseña.' using errcode = '22023';
+  end if;
+
+  if length(new.body) > 1200 then
+    raise exception 'La reseña es demasiado larga.' using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.validate_review_comment_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.user_id, 'review:comment', 12, 60);
+  new.body := btrim(coalesce(new.body, ''));
+
+  if length(new.body) = 0 then
+    raise exception 'El comentario no puede estar vacío.' using errcode = '22023';
+  end if;
+
+  if length(new.body) > 500 then
+    raise exception 'El comentario es demasiado largo.' using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.validate_review_like_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.user_id, 'review:like', 45, 60);
+  return new;
+end;
+$$;
+
+create or replace function public.validate_follow_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.follower_id, 'profile:follow', 25, 60);
+  return new;
+end;
+$$;
+
+create or replace function public.validate_message_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.sender_id, 'message:send', 30, 60);
+  new.body := btrim(coalesce(new.body, ''));
+  new.album_id := nullif(left(btrim(coalesce(new.album_id, '')), 160), '');
+  new.album_title := left(btrim(coalesce(new.album_title, '')), 160);
+  new.album_artist := left(btrim(coalesce(new.album_artist, '')), 160);
+  new.album_cover := left(btrim(coalesce(new.album_cover, '')), 600);
+
+  if length(new.body) = 0 and new.album_id is null then
+    raise exception 'El mensaje no puede estar vacío.' using errcode = '22023';
+  end if;
+
+  if length(new.body) > 600 then
+    raise exception 'El mensaje es demasiado largo.' using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.validate_report_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.reporter_id, 'report:create', 8, 60);
+  new.target_type := left(btrim(coalesce(new.target_type, '')), 40);
+  new.target_id := left(btrim(coalesce(new.target_id, '')), 160);
+  new.reason := left(btrim(coalesce(new.reason, '')), 80);
+  new.details := left(btrim(coalesce(new.details, '')), 500);
+
+  if length(new.target_type) = 0 or length(new.target_id) = 0 or length(new.reason) = 0 then
+    raise exception 'Faltan datos para enviar el reporte.' using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.validate_listening_event_input()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.enforce_action_rate_limit(new.user_id, 'listening:create', 90, 60);
+  new.album_id := left(btrim(coalesce(new.album_id, '')), 160);
+  new.album_title := left(btrim(coalesce(new.album_title, '')), 160);
+  new.album_artist := left(btrim(coalesce(new.album_artist, '')), 160);
+  new.cover_url := left(btrim(coalesce(new.cover_url, '')), 600);
+  new.preview_url := left(btrim(coalesce(new.preview_url, '')), 600);
+  new.source := left(btrim(coalesce(new.source, 'player')), 40);
+
+  if length(new.album_id) = 0 or length(new.album_title) = 0 then
+    raise exception 'Faltan datos para guardar la escucha.' using errcode = '22023';
+  end if;
+
+  return new;
+end;
+$$;
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -185,7 +394,28 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  raw_handle text;
+  safe_handle text;
+  safe_display_name text;
 begin
+  raw_handle := coalesce(new.raw_user_meta_data ->> 'handle', split_part(coalesce(new.email, ''), '@', 1), '');
+  raw_handle := regexp_replace(btrim(raw_handle), '^@+', '');
+  safe_handle := regexp_replace(lower(raw_handle), '[^a-z0-9_.]', '_', 'g');
+  safe_handle := regexp_replace(safe_handle, '(^[._]+|[._]+$)', '', 'g');
+  safe_handle := regexp_replace(safe_handle, '[._]{2,}', '_', 'g');
+
+  if length(safe_handle) < 3 then
+    safe_handle := 'user_' || replace(left(new.id::text, 8), '-', '');
+  end if;
+
+  safe_handle := left(safe_handle, 24);
+  safe_display_name := left(btrim(coalesce(new.raw_user_meta_data ->> 'display_name', split_part(coalesce(new.email, ''), '@', 1), 'B-Sider')), 60);
+
+  if length(safe_display_name) = 0 then
+    safe_display_name := safe_handle;
+  end if;
+
   insert into public.profiles (
     id,
     handle,
@@ -202,8 +432,8 @@ begin
   )
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'handle', split_part(new.email, '@', 1)),
-    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1)),
+    safe_handle,
+    safe_display_name,
     nullif(new.raw_user_meta_data ->> 'birth_date', '')::date,
     null,
     '',
@@ -243,6 +473,47 @@ alter table public.subscriptions enable row level security;
 alter table public.listening_events enable row level security;
 alter table public.notifications enable row level security;
 alter table public.push_devices enable row level security;
+alter table public.action_rate_limits enable row level security;
+
+drop trigger if exists profiles_validate_input on public.profiles;
+create trigger profiles_validate_input
+before insert or update on public.profiles
+for each row execute function public.validate_profile_input();
+
+drop trigger if exists reviews_validate_input on public.reviews;
+create trigger reviews_validate_input
+before insert on public.reviews
+for each row execute function public.validate_review_input();
+
+drop trigger if exists review_comments_validate_input on public.review_comments;
+create trigger review_comments_validate_input
+before insert on public.review_comments
+for each row execute function public.validate_review_comment_input();
+
+drop trigger if exists review_likes_validate_input on public.review_likes;
+create trigger review_likes_validate_input
+before insert on public.review_likes
+for each row execute function public.validate_review_like_input();
+
+drop trigger if exists follows_validate_input on public.follows;
+create trigger follows_validate_input
+before insert on public.follows
+for each row execute function public.validate_follow_input();
+
+drop trigger if exists messages_validate_input on public.messages;
+create trigger messages_validate_input
+before insert on public.messages
+for each row execute function public.validate_message_input();
+
+drop trigger if exists reports_validate_input on public.reports;
+create trigger reports_validate_input
+before insert on public.reports
+for each row execute function public.validate_report_input();
+
+drop trigger if exists listening_events_validate_input on public.listening_events;
+create trigger listening_events_validate_input
+before insert on public.listening_events
+for each row execute function public.validate_listening_event_input();
 
 drop policy if exists "Profiles are readable" on public.profiles;
 create policy "Profiles are readable"

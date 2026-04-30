@@ -64,6 +64,7 @@ Eso deja lista la base para:
 - reportes
 - suscripciones
 - dispositivos para push
+- rate limiting de acciones sensibles
 
 También crea triggers para:
 
@@ -71,6 +72,8 @@ También crea triggers para:
 - dejar la cuenta en plan free
 - guardar `birth_date`
 - guardar `profile_completed_at`
+- validar tamaños de inputs
+- frenar spam básico en reseñas, comentarios, likes, follows, mensajes, reportes y escuchas
 
 ## 4. Storage
 
@@ -114,6 +117,7 @@ Referencia interna:
 Para beta real conviene desplegar estas funciones:
 
 - [supabase/functions/notify-create/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/notify-create/index.ts)
+- [supabase/functions/push-dispatch/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/push-dispatch/index.ts)
 - [supabase/functions/delete-account/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/delete-account/index.ts)
 - [supabase/functions/spotify-search/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/spotify-search/index.ts)
 - [supabase/functions/music-oracle/index.ts](/C:/Users/Administrator/Desktop/b-side/supabase/functions/music-oracle/index.ts)
@@ -124,6 +128,22 @@ Para beta real conviene desplegar estas funciones:
 
 ```bash
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+```
+
+`push-dispatch` también necesita un secret interno para que no pueda llamarse desde cliente:
+
+```bash
+PUSH_DISPATCH_SECRET=un_valor_largo_y_privado
+```
+
+Deploy recomendado:
+
+```powershell
+npx supabase functions deploy notify-create --project-ref tu-project-ref
+npx supabase functions deploy push-dispatch --project-ref tu-project-ref
+npx supabase functions deploy delete-account --project-ref tu-project-ref
+npx supabase functions deploy spotify-search --project-ref tu-project-ref
+npx supabase functions deploy music-oracle --project-ref tu-project-ref
 ```
 
 ## 8. Primer flujo real a validar
